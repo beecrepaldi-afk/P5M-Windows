@@ -20,6 +20,11 @@ jobs:
       libplacebo_tag: v7.360.1
       sdl2_compat_tag: 2.32.64
       vulkan_sdk_version: 1.4.363.0
+      # The runners moved to CMake 4, which refuses projects that still ask
+      # for CMake < 3.5 (json-c in this vcpkg baseline, among others). vcpkg
+      # scrubs the environment, so the variable has to be let through.
+      CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+      VCPKG_KEEP_ENV_VARS: CMAKE_POLICY_VERSION_MINIMUM
 
     defaults:
       run:
