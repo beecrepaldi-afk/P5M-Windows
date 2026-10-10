@@ -193,27 +193,16 @@ jobs:
           cmake --build build --config Release --clean-first --target chiaki
 
       - name: Prepare Qt deployment package
+        # Every DLL the dependencies installed, instead of a list of exact
+        # names: vcpkg renames them between baselines (lcms2 -> lcms2-2...).
         run: |
           mkdir P5M-Win
           cp build\gui\chiaki.exe P5M-Win\P5M.exe
           cp build\third-party\cpp-steam-tools\cpp-steam-tools.dll P5M-Win
           cp scripts\qtwebengine_import.qml gui\src\qml\
-          cp "${env:VCPKG_INSTALLED_DIR}\${{ env.triplet }}\bin\libcrypto-*-x64.dll" P5M-Win
-          cp "${env:VCPKG_INSTALLED_DIR}\${{ env.triplet }}\bin\libssl-*-x64.dll" P5M-Win
-          cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\SDL2.dll" P5M-Win
-          cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\SDL3.dll" P5M-Win
-          cp "${env:VCPKG_INSTALLED_DIR}\${{ env.triplet }}\bin\opus.dll" P5M-Win
-          cp "${env:VCPKG_INSTALLED_DIR}\${{ env.triplet }}\bin\libspeexdsp.dll" P5M-Win
-          cp "${env:VCPKG_INSTALLED_DIR}\${{ env.triplet }}\bin\lcms2.dll" P5M-Win
-          cp "${env:VCPKG_INSTALLED_DIR}\${{ env.triplet }}\bin\miniupnpc.dll" P5M-Win
-          cp "${env:VCPKG_INSTALLED_DIR}\${{ env.triplet }}\bin\json-c.dll" P5M-Win
-          cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\swresample-*.dll" P5M-Win
-          cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\avcodec-*.dll" P5M-Win
-          cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\avutil-*.dll" P5M-Win
-          cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\avformat-*.dll" P5M-Win
-          cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\libplacebo-*.dll" P5M-Win
-          cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\shaderc_shared.dll" P5M-Win
-          cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\spirv-cross-c-shared.dll" P5M-Win
+          Copy-Item "${env:VCPKG_INSTALLED_DIR}\${{ env.triplet }}\bin\*.dll" P5M-Win
+          Copy-Item "${{ github.workspace }}\${{ env.dep_folder }}\bin\*.dll" P5M-Win
+          Get-ChildItem P5M-Win -Filter *.dll | ForEach-Object { $_.Name }
           cp COPYING P5M-Win\LICENSE.txt
           windeployqt.exe --no-translations --qmldir=gui\src\qml --release P5M-Win\P5M.exe
 
