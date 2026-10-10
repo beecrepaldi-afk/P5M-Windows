@@ -15,7 +15,9 @@ jobs:
       CXX: clang-cl.exe
       VULKAN_SDK: C:\VulkanSDK\
       triplet: x64-windows
-      vcpkg_baseline: 42bb0d9e8d4cf33485afb9ee2229150f79f61a1f
+      # vcpkg 2026.07.29: the older baseline fetched msys2 packages that the
+      # mirrors no longer carry (pkgconf 2.1.0).
+      vcpkg_baseline: c76c06644034521fb761a39f8f52d8e87d1103d5
       dep_folder: deps
       libplacebo_tag: v7.360.1
       sdl2_compat_tag: 2.32.64
@@ -181,8 +183,6 @@ jobs:
           cp "${env:VCPKG_INSTALLED_DIR}\${{ env.triplet }}\bin\libssl-*-x64.dll" P5M-Win
           cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\SDL2.dll" P5M-Win
           cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\SDL3.dll" P5M-Win
-          cp "${env:VCPKG_INSTALLED_DIR}\${{ env.triplet }}\bin\hidapi.dll" P5M-Win
-          cp "${env:VCPKG_INSTALLED_DIR}\${{ env.triplet }}\bin\fftw3.dll" P5M-Win
           cp "${env:VCPKG_INSTALLED_DIR}\${{ env.triplet }}\bin\opus.dll" P5M-Win
           cp "${env:VCPKG_INSTALLED_DIR}\${{ env.triplet }}\bin\libspeexdsp.dll" P5M-Win
           cp "${env:VCPKG_INSTALLED_DIR}\${{ env.triplet }}\bin\lcms2.dll" P5M-Win
