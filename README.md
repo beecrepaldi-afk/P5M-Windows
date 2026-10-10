@@ -26,7 +26,7 @@ P5M is a PS5 Remote Play app based on chiaki-ng. This is the Windows edition: th
 
 ## Download
 
-Get the latest `P5M-win_x64-portable-*.zip` from [Releases](../../releases) (or from the latest successful run in [Actions](../../actions)), unzip it anywhere and run `P5M.exe`. P5M keeps its settings apart from an installed chiaki-ng.
+Get the latest `P5M-*-win_x64-portable.zip` from [Releases](../../releases) (or from the latest successful run in [Actions](../../actions)), unzip it anywhere and run `P5M.exe`. P5M keeps its settings apart from an installed chiaki-ng.
 
 P5M for Windows is created by [beecrepaldi-afk](https://github.com/beecrepaldi-afk). See [AUTHORS.md](AUTHORS.md). P5M is free software under the GNU AGPL v3, like chiaki-ng.
 

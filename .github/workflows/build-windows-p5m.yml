@@ -172,6 +172,14 @@ jobs:
         run: |
           git apply --ignore-whitespace --verbose --directory=third-party/gf-complete/ scripts/windows-vc/gf-complete.patch
 
+      - name: Work out the version
+        # Tag win-v0.1.0-alpha.1 -> 0.1.0-alpha.1; other builds carry the commit.
+        run: |
+          if ("${{ github.ref_type }}" -eq "tag") { $v = "${{ github.ref_name }}" -replace '^win-v', '' }
+          else { $v = "0.1.0-alpha.1+" + "${{ github.sha }}".Substring(0, 8) }
+          echo "P5M_VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "Version $v"
+
       - name: Configure P5M
         run: |
           cmake `
@@ -182,7 +190,7 @@ jobs:
           -DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE `
           -DCMAKE_BUILD_TYPE=Release `
           -DCHIAKI_ENABLE_CLI=OFF `
-          -DP5M_WIN_VERSION="${{ github.ref_type == 'tag' && github.ref_name || format('0.1.0-alpha.1+{0}', github.sha) }}" `
+          -DP5M_WIN_VERSION="${env:P5M_VERSION}" `
           -DCHIAKI_GUI_ENABLE_SDL_GAMECONTROLLER=ON `
           -DCHIAKI_ENABLE_STEAMDECK_NATIVE=OFF `
           -DPYTHON_EXECUTABLE="${{ env.pythonLocation }}\python.exe" `
@@ -208,9 +216,12 @@ jobs:
 
       - name: Package P5M
         run: |
-          $VERSION = "${{ github.ref_type == 'tag' && github.ref_name || github.sha }}"
-          $RELEASE_PACKAGE_FILE = "P5M-win_x64-portable-$VERSION.zip"
-          Compress-Archive P5M-Win $RELEASE_PACKAGE_FILE
+          $VERSION = "${env:P5M_VERSION}" -replace '\+', '-'
+          $RELEASE_PACKAGE_FILE = "P5M-$VERSION-win_x64-portable.zip"
+          # 7-Zip writes forward slashes; Compress-Archive on PowerShell 5.1
+          # writes backslashes that extractors outside Windows choke on.
+          7z a -tzip -mx=7 $RELEASE_PACKAGE_FILE P5M-Win
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $release_filepath = Get-ChildItem $RELEASE_PACKAGE_FILE | %{$_[0].FullName}
           echo "RELEASE_PACKAGE_PATH=$release_filepath" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
 

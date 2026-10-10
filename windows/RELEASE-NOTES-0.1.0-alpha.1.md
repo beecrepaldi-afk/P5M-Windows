@@ -1,0 +1,33 @@
+**First Windows build of P5M. Early alpha: it has not yet been tested on a real Windows PC.** If you try it, please tell us how it went with *Report a problem* in the app, even if everything works.
+
+## What's in it
+
+P5M for Windows shares its streaming core with [P5M for macOS](https://github.com/beecrepaldi-afk/P5M-mac):
+
+- **PlayStation streaming protocol version 20**, the one the PS5 and Sony's official app use (open-source players stop at version 12)
+- **No more stuck buttons** when the network drops a packet
+- **Less waiting on a lossy network**: packets that error correction can rebuild don't hold the picture back
+- **Sound closer to the picture** (10 ms audio blocks, adaptive queue)
+- **Learns your network**: each router remembers the bitrate that worked
+- **Faster PSN remote connection**
+
+And tuning for Windows:
+
+- The stream's traffic joins a Windows audio/video quality-of-service flow (video priority on Wi-Fi)
+- Network and render threads run at game priority (MMCSS), with a 1 ms timer and no power throttling while you play
+- **New, optional Direct3D 11 renderer** (Settings › Renderer Backend › Direct3D 11): hardware decoding and presentation on one device, flip-model presentation, tearing when VSync is off, HDR10 when Windows has HDR on. Vulkan stays the default until we have reports from real PCs.
+
+## Install
+
+1. Download `P5M-0.1.0-alpha.1-win_x64-portable.zip` below and unzip it anywhere.
+2. Run `P5M.exe`. If Windows says the Visual C++ runtime is missing, run `vc_redist.x64.exe` from the same folder first.
+3. P5M is not signed yet, so Windows SmartScreen may warn about an unknown publisher: choose *More info › Run anyway*.
+
+Windows 10 (1803 or later) or Windows 11, 64-bit. P5M keeps its settings apart from an installed chiaki-ng.
+
+## Known limits
+
+- Untested on real hardware; expect rough edges.
+- DualSense haptics over Bluetooth are not supported yet (USB works as in chiaki-ng).
+
+P5M is free software under the GNU AGPL v3, based on chiaki-ng. Not endorsed by Sony Interactive Entertainment.

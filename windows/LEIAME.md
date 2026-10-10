@@ -70,7 +70,7 @@ Renderer Backend; **o padrão continua Vulkan** até haver diário de PC real.
 Não há build Windows nesta máquina. A CI
 `.github/workflows/build-windows-p5m.yml` (clang-cl + vcpkg + Qt 6.9, a
 mesma receita do chiaki-ng) roda em push no ramo `windows`, em tags
-`win-v*` ou à mão, e gera `P5M-win_x64-portable-<versão>.zip` com
+`win-v*` ou à mão, e gera `P5M-<versão>-win_x64-portable.zip` com
 `P5M.exe`. O instalador Inno do chiaki-ng ficou de fora (tem a marca dele).
 
 ## Não portado (e por quê)
