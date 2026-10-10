@@ -4,6 +4,11 @@
 // tearing, HDR10 colour space) follows the approach of Moonlight's D3D11VA
 // renderer (moonlight-stream/moonlight-qt, GPL-3.0); the code here is our own.
 
+// windows.h would otherwise turn std::min/std::max into its macros.
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
 #include "d3d11renderer.h"
 
 #include <QLoggingCategory>
