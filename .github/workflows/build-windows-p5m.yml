@@ -19,6 +19,7 @@ jobs:
       dep_folder: deps
       libplacebo_tag: v7.360.1
       sdl2_compat_tag: 2.32.64
+      vulkan_sdk_version: 1.4.363.0
 
     defaults:
       run:
@@ -36,9 +37,11 @@ jobs:
       - name: Setup Vulkan
         run: |
           $ProgressPreference = 'SilentlyContinue'
-          $ver = (Invoke-WebRequest -Uri "https://vulkan.lunarg.com/sdk/latest.json" | ConvertFrom-Json).windows
+          # Pinned: "latest" moves under us, and Windows PowerShell 5.1 needs
+          # -UseBasicParsing or Invoke-WebRequest fails with a null reference.
+          $ver = "${{ env.vulkan_sdk_version }}"
           echo Version $ver
-          Invoke-WebRequest -Uri "https://sdk.lunarg.com/sdk/download/$ver/windows/vulkansdk-windows-X64-$ver.exe" -OutFile VulkanSDK.exe
+          Invoke-WebRequest -UseBasicParsing -Uri "https://sdk.lunarg.com/sdk/download/$ver/windows/vulkansdk-windows-X64-$ver.exe" -OutFile VulkanSDK.exe
           echo Downloaded
           .\VulkanSDK.exe --root ${{ env.VULKAN_SDK }}  --accept-licenses --default-answer --confirm-command install
 
@@ -97,14 +100,17 @@ jobs:
           cmake --build build --config Release
           cmake --install build
 
-      - name: Setup shaderc
+      - name: Setup shaderc (from the Vulkan SDK)
+        # The Google build link this step used to read is gone (NoSuchKey);
+        # the Vulkan SDK ships the same shaderc_shared, so point pkg-config
+        # (libplacebo's dependency('shaderc')) at it.
         run: |
-          $ProgressPreference = 'SilentlyContinue'
-          $url = ((Invoke-WebRequest -UseBasicParsing -Uri "https://storage.googleapis.com/shaderc/badges/build_link_windows_vs2019_release.html").Content | Select-String -Pattern 'url=(.*)"').Matches.Groups[1].Value
-          Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile .\shaderc.zip
-          Expand-Archive -LiteralPath "shaderc.zip" -DestinationPath "."
-          cp "./install/*" "./${{ env.dep_folder }}" -Force -Recurse
-          rm "./install" -r -force
+          New-Item -ItemType Directory -Force -Path "${{ github.workspace }}\${{ env.dep_folder }}\lib\pkgconfig" | Out-Null
+          Copy-Item "${{ env.VULKAN_SDK }}Bin\shaderc_shared.dll" "${{ github.workspace }}\${{ env.dep_folder }}\bin\"
+          $sdk = "${{ env.VULKAN_SDK }}".TrimEnd('\').Replace('\', '/')
+          $pc = "prefix=$sdk`nincludedir=`${prefix}/Include`nlibdir=`${prefix}/Lib`n`nName: shaderc`nDescription: shaderc from the Vulkan SDK`nVersion: 2025.2.0`nLibs: -L`${libdir} -lshaderc_shared`nCflags: -I`${includedir}`n"
+          [System.IO.File]::WriteAllText("${{ github.workspace }}\${{ env.dep_folder }}\lib\pkgconfig\shaderc.pc", $pc)
+          Get-Content "${{ github.workspace }}\${{ env.dep_folder }}\lib\pkgconfig\shaderc.pc"
 
       - name: Make build directory
         run: |
