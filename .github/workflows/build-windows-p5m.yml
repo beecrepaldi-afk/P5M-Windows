@@ -27,6 +27,8 @@ jobs:
       # scrubs the environment, so the variable has to be let through.
       CMAKE_POLICY_VERSION_MINIMUM: "3.5"
       VCPKG_KEEP_ENV_VARS: CMAKE_POLICY_VERSION_MINIMUM
+      # Built ports are kept between runs (see the cache steps around vcpkg).
+      VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}\vcpkg-binary-cache,readwrite
 
     defaults:
       run:
@@ -123,12 +125,29 @@ jobs:
         run: |
           mkdir build
 
+      - name: Restore vcpkg binary cache
+        uses: actions/cache/restore@v4
+        with:
+          path: vcpkg-binary-cache
+          key: vcpkg-bin-${{ env.vcpkg_baseline }}-${{ hashFiles('vcpkg.json') }}-${{ github.run_id }}
+          restore-keys: vcpkg-bin-${{ env.vcpkg_baseline }}-${{ hashFiles('vcpkg.json') }}-
+
+      - name: Make vcpkg binary cache directory
+        run: New-Item -ItemType Directory -Force -Path vcpkg-binary-cache | Out-Null
+
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: ${{ env.vcpkg_baseline }}
           runVcpkgInstall: true
           vcpkgJsonGlob: "vcpkg.json"
+
+      - name: Save vcpkg binary cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: vcpkg-binary-cache
+          key: vcpkg-bin-${{ env.vcpkg_baseline }}-${{ hashFiles('vcpkg.json') }}-${{ github.run_id }}
 
       - name: Build libplacebo
         run: |

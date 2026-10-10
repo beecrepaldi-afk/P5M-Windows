@@ -450,10 +450,9 @@ private:
     QAtomicInteger<int> metal_frame_render_queued = 0;
     QAtomicInteger<int> metal_present_deferred = 0;
 #endif
-#if defined(Q_OS_MACOS)
+    // macOS only; stay false/0 elsewhere (isFullscreen/hiddenTop read them).
     bool mac_fullscreen = false; // borderless fullscreen (setMacBorderlessFullscreen)
     int hidden_top = 0; // points hidden by the notch strip (macWindowHiddenTop)
-#endif
     VkSemaphore quick_sem = VK_NULL_HANDLE;
     uint64_t quick_sem_value = 0;
     VkImage quick_vk_image = VK_NULL_HANDLE;
