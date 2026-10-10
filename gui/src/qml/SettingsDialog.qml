@@ -1097,7 +1097,9 @@ DialogView {
 
                     C.ComboBox {
                         Layout.preferredWidth: 400
-                        model: Qt.platform.os === "osx" ? [qsTr("Vulkan"), qsTr("OpenGL"), qsTr("Metal")] : [qsTr("Vulkan"), qsTr("OpenGL")]
+                        model: Qt.platform.os === "osx" ? [qsTr("Vulkan"), qsTr("OpenGL"), qsTr("Metal")]
+                             : Qt.platform.os === "windows" ? [qsTr("Vulkan"), qsTr("OpenGL"), qsTr("Direct3D 11")]
+                             : [qsTr("Vulkan"), qsTr("OpenGL")]
                         lastInFocusChain: dialog.metal
                         currentIndex: Chiaki.settings.rendererBackend
                         onActivated: (index) => {

@@ -40,6 +40,31 @@ macOS (`settings.cpp`).
 | `macNetworkKey` (MAC do roteador) | `GetBestRoute2` + `GetIpNetEntry2`/`ResolveIpNetEntry2` → aprendizado de bitrate por rede liga no Windows | idem + `streamsession.cpp` |
 | Nome P5M, versão própria | `P5M`/`P5M_WIN_VERSION`, configurações e logs separados do chiaki-ng | `main.cpp`, `gui/CMakeLists.txt` |
 
+## Renderizador Direct3D 11 (opção, 10/10)
+
+`gui/src/d3d11renderer.cpp`, mesma interface do `MetalRenderer` (a janela
+usa `NativeRenderer`; o valor 2 do backend é "nativo": Metal no Mac,
+Direct3D 11 no Windows, salvo como `d3d11`). Escolhido em Settings ›
+Renderer Backend; **o padrão continua Vulkan** até haver diário de PC real.
+
+- Um dispositivo D3D11 para tudo: o D3D11VA decodifica nele
+  (`nativeHwDeviceCtx`), a fatia é copiada na GPU para uma textura NV12/P010
+  amostrável (sem passar pela CPU), o Qt Quick desenha a interface com o RHI
+  D3D11 numa textura nossa.
+- Swapchain flip model (`FLIP_DISCARD`, 3 buffers), objeto de espera com
+  latência 1 (o mesmo "um present por vez" do Metal), tearing com VSync
+  desligado.
+- HDR10 (PQ/BT.2020 + metadados) quando o Windows está com HDR ligado; senão
+  o HDR é mapeado para SDR com a curva do Quest (reta até 0,8, ombro até
+  1000 nits, branco do painel 240 nits).
+- Diário `[d3d11] 10s:` com o modo de apresentação (`composed (DWM copy)`,
+  `overlay`, `independent flip`), presents/s e tempo do Present.
+- Shaders HLSL compilados na abertura (`d3dcompiler_47`, do próprio Windows);
+  validados aqui com o `glslangValidator`.
+- Abordagem (não código) inspirada no `d3d11va.cpp` do Moonlight-qt. Fica
+  para depois: cópia zero de verdade (amostrar a fatia do decodificador) e o
+  upscaling da NVIDIA/Intel (`VideoProcessorSetStreamExtension`, ver mpv).
+
 ## Build
 
 Não há build Windows nesta máquina. A CI

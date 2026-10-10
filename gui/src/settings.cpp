@@ -707,7 +707,11 @@ void Settings::SetPlaceboPreset(PlaceboPreset preset)
 static const QMap<RenderBackend, QString> render_backend_values = {
 	{ RenderBackend::Vulkan, "vulkan" },
 	{ RenderBackend::OpenGL, "opengl" },
+#if defined(Q_OS_WIN)
+	{ RenderBackend::D3D11, "d3d11" },
+#else
 	{ RenderBackend::Metal, "metal" },
+#endif
 };
 
 #if defined(Q_OS_MACOS)
@@ -730,8 +734,8 @@ RenderBackend Settings::GetRenderBackend() const
 	}
 #endif
 
-#if !defined(Q_OS_MACOS)
-	// Metal only exists on macOS
+#if !defined(Q_OS_MACOS) && !defined(Q_OS_WIN)
+	// The native presenter exists only on macOS (Metal) and Windows (D3D11)
 	if (backend == RenderBackend::Metal)
 		return render_backend_default;
 #endif

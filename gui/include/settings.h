@@ -71,7 +71,10 @@ enum class PlaceboPreset {
 enum class RenderBackend {
 	Vulkan,
 	OpenGL,
-	Metal
+	// The platform's own presenter, drawing video and UI without libplacebo:
+	// Metal on macOS, Direct3D 11 on Windows.
+	Metal,
+	D3D11 = Metal
 };
 
 enum class WindowType {

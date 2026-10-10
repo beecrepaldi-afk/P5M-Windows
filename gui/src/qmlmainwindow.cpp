@@ -6,6 +6,7 @@
 #include "macStreamActivity.h"
 #elif defined(Q_OS_WIN)
 #include "windowsStreamTuning.h"
+#include "d3d11renderer.h"
 #endif
 #include "chiaki/log.h"
 #include "chiaki/time.h"
@@ -2538,7 +2539,7 @@ QmlMainWindow::QmlMainWindow(const StreamSessionConnectInfo &connect_info)
 
 QmlMainWindow::~QmlMainWindow()
 {
-#if defined(Q_OS_MACOS)
+#if defined(Q_OS_MACOS) || defined(Q_OS_WIN)
     // O callback pode chegar pela thread do driver. Limpe-o antes de parar o
     // render ou excluir seu receptor/janela.
     if (metal_renderer)
@@ -2650,7 +2651,7 @@ QmlMainWindow::~QmlMainWindow()
     delete quick_window;
     // calls invalidate here if not already called
     delete quick_render;
-#if defined(Q_OS_MACOS)
+#if defined(Q_OS_MACOS) || defined(Q_OS_WIN)
     metal_renderer.reset();
 #endif
     if (owns_render_thread)
@@ -3017,7 +3018,7 @@ void QmlMainWindow::presentFrame(ChiakiFfmpegFrame frame, int32_t frames_lost, q
         }
         if (!startup_warmup_frame_active)
             startup_first_real_frame_queued_pending_visibility.storeRelease(1);
-#if defined(Q_OS_MACOS)
+#if defined(Q_OS_MACOS) || defined(Q_OS_WIN)
         if (render_backend == RenderBackend::Metal) {
             // Straight to the render thread: the GUI thread is not on the
             // video path (and is sometimes busy, e.g. opening audio devices).
@@ -4667,6 +4668,13 @@ int QmlMainWindow::pendingFrameOverflowLimit(int submission_depth_limit) const
     return 2;
 }
 
+#if defined(Q_OS_WIN)
+AVBufferRef *QmlMainWindow::nativeHwDeviceCtx()
+{
+    return render_backend == RenderBackend::D3D11 && metal_renderer ? metal_renderer->hwDeviceCtx() : nullptr;
+}
+#endif
+
 AVBufferRef *QmlMainWindow::vulkanHwDeviceCtx()
 {
     if (render_backend != RenderBackend::Vulkan)
@@ -4808,21 +4816,33 @@ void QmlMainWindow::init(Settings *settings, bool exit_app_on_stream_exit)
     connect(this, &QWindow::windowStateChanged, this, &QmlMainWindow::fullscreenChanged);
     bypass_frame_queue = settings->GetDirectFrameMapping();
     render_backend = settings->GetRenderBackend();
-#if !defined(Q_OS_MACOS)
+#if !defined(Q_OS_MACOS) && !defined(Q_OS_WIN)
     if (render_backend == RenderBackend::Metal)
         render_backend = RenderBackend::Vulkan;
 #endif
     if (render_backend == RenderBackend::Metal) {
-        // Metal draws the newest decoded picture itself: no OpenGL context,
-        // and no libplacebo GPU, renderer, queue or swapchain (only its
-        // options object, which the settings code still reads).
+        // The native presenter (Metal, Direct3D 11) draws the newest decoded
+        // picture itself: no OpenGL context, and no libplacebo GPU, renderer,
+        // queue or swapchain (only its options object, which the settings
+        // code still reads).
+#if defined(Q_OS_WIN)
+        setSurfaceType(QWindow::Direct3DSurface);
+#else
         setSurfaceType(QWindow::MetalSurface);
+#endif
         if (initMetal()) {
             bypass_frame_queue = true;
         } else {
+#if defined(Q_OS_WIN)
+            // Vulkan is the tested path on Windows.
+            qCWarning(chiakiGui) << "Direct3D 11 renderer unavailable, falling back to Vulkan";
+            destroy();
+            render_backend = RenderBackend::Vulkan;
+#else
             qCWarning(chiakiGui) << "Metal renderer unavailable, falling back to OpenGL";
             destroy();
             render_backend = RenderBackend::OpenGL;
+#endif
         }
     }
     if (render_backend != RenderBackend::Metal)
@@ -5108,13 +5128,17 @@ renderer_backend_ready:
 
     QQuickWindow::setDefaultAlphaBuffer(true);
     QQuickWindow::setGraphicsApi(render_backend == RenderBackend::Vulkan ? QSGRendererInterface::Vulkan
+#if defined(Q_OS_WIN)
+                                 : render_backend == RenderBackend::D3D11 ? QSGRendererInterface::Direct3D11
+#else
                                  : render_backend == RenderBackend::Metal ? QSGRendererInterface::Metal
+#endif
                                  : QSGRendererInterface::OpenGL);
     quick_window = new QQuickWindow(quick_render);
     if (render_backend == RenderBackend::Vulkan) {
         quick_window->setVulkanInstance(qt_vk_inst);
         quick_window->setGraphicsDevice(QQuickGraphicsDevice::fromDeviceObjects(placebo_vulkan->phys_device, placebo_vulkan->device, placebo_vulkan->queue_graphics.index));
-#if defined(Q_OS_MACOS)
+#if defined(Q_OS_MACOS) || defined(Q_OS_WIN)
     } else if (render_backend == RenderBackend::Metal) {
         quick_window->setGraphicsDevice(metal_renderer->graphicsDevice());
 #endif
@@ -5922,7 +5946,7 @@ void QmlMainWindow::updateVSync()
         }
     }
 
-#if defined(Q_OS_MACOS)
+#if defined(Q_OS_MACOS) || defined(Q_OS_WIN)
     if (render_backend == RenderBackend::Metal) {
         const bool vsync = settings->GetVSyncEnabled();
         const bool hdr = settings->GetHdrOutputEnabled();
@@ -6129,7 +6153,7 @@ void QmlMainWindow::resizeSwapchain()
 {
     Q_ASSERT(QThread::currentThread() == render_thread);
 
-#if defined(Q_OS_MACOS)
+#if defined(Q_OS_MACOS) || defined(Q_OS_WIN)
     if (render_backend == RenderBackend::Metal) {
         const QSize pixel_size(width() * devicePixelRatio(), height() * devicePixelRatio());
         if (pixel_size.isEmpty())
@@ -6276,7 +6300,7 @@ void QmlMainWindow::sync()
 {
     Q_ASSERT(QThread::currentThread() == render_thread);
 
-#if defined(Q_OS_MACOS)
+#if defined(Q_OS_MACOS) || defined(Q_OS_WIN)
     if (render_backend == RenderBackend::Metal ? !metal_renderer->hasOverlay() : !quick_tex)
         return;
 #else
@@ -6326,7 +6350,7 @@ void QmlMainWindow::beginFrame()
         quick_render->beginFrame();
         return;
     }
-#if defined(Q_OS_MACOS)
+#if defined(Q_OS_MACOS) || defined(Q_OS_WIN)
     if (render_backend == RenderBackend::Metal) {
         if (!metal_renderer->hasOverlay())
             return;
@@ -6509,7 +6533,7 @@ void QmlMainWindow::handleVulkanRendererFallback(const QString &title, const QSt
 void QmlMainWindow::render()
 {
     Q_ASSERT(QThread::currentThread() == render_thread);
-#if defined(Q_OS_MACOS)
+#if defined(Q_OS_MACOS) || defined(Q_OS_WIN)
     if (render_backend == RenderBackend::Metal) {
         renderMetal();
         return;
@@ -7852,10 +7876,10 @@ QObject *QmlMainWindow::focusObject() const
 
 bool QmlMainWindow::initMetal()
 {
-#if defined(Q_OS_MACOS)
+#if defined(Q_OS_MACOS) || defined(Q_OS_WIN)
     if (!handle())
         create();
-    metal_renderer = MetalRenderer::create(this);
+    metal_renderer = NativeRenderer::create(this);
     if (!metal_renderer)
         return false;
     metal_renderer->setRefreshCallback([this]() {
@@ -7874,7 +7898,7 @@ bool QmlMainWindow::initMetal()
 #endif
 }
 
-#if defined(Q_OS_MACOS)
+#if defined(Q_OS_MACOS) || defined(Q_OS_WIN)
 void QmlMainWindow::scheduleDeferredMetalRender()
 {
     if (metal_frame_render_queued.testAndSetAcquire(0, 1)) {
@@ -7888,7 +7912,7 @@ void QmlMainWindow::scheduleDeferredMetalRender()
 
 void QmlMainWindow::renderMetal(bool scheduled)
 {
-#if defined(Q_OS_MACOS)
+#if defined(Q_OS_MACOS) || defined(Q_OS_WIN)
     // Over the internet (PSN) frames arrive irregularly: keeping one picture
     // per refresh held most of them back a refresh (~15 ms). There, drop one
     // after a few held instead of after half a second. (Known only once the
@@ -7926,11 +7950,11 @@ void QmlMainWindow::renderMetal(bool scheduled)
         startup_video_visible_pending.loadAcquire() == 0)
         startup_video_visible_pending.storeRelease(1);
 
-    MetalRenderer::Fit fit = MetalRenderer::Fit::Normal;
+    NativeRenderer::Fit fit = NativeRenderer::Fit::Normal;
     if (video_mode == VideoMode::Stretch)
-        fit = MetalRenderer::Fit::Stretch;
+        fit = NativeRenderer::Fit::Stretch;
     else if (video_mode == VideoMode::Zoom)
-        fit = MetalRenderer::Fit::Zoom;
+        fit = NativeRenderer::Fit::Zoom;
 
     // A present is still waiting for the display: keep the newest picture and
     // draw it when that one lands (presented callback), never queue behind it.

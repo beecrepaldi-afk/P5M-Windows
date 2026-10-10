@@ -722,9 +722,9 @@ void QmlSettings::setRendererBackend(int backend)
         qWarning() << "Ignoring invalid renderer backend value:" << backend;
         return;
     }
-#ifndef Q_OS_MACOS
+#if !defined(Q_OS_MACOS) && !defined(Q_OS_WIN)
     if (backend == static_cast<int>(RenderBackend::Metal)) {
-        qWarning() << "Ignoring Metal renderer backend: only available on macOS";
+        qWarning() << "Ignoring native renderer backend: only available on macOS and Windows";
         return;
     }
 #endif

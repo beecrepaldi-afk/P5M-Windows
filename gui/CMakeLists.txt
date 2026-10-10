@@ -99,6 +99,8 @@ elseif(WIN32)
 		src/windowsWakeSleep.cpp
 		include/windowsStreamTuning.h
 		src/windowsStreamTuning.cpp
+		include/d3d11renderer.h
+		src/d3d11renderer.cpp
 	)
 endif()
 
@@ -225,6 +227,8 @@ endif()
 if(WIN32)
 	# P5M for Windows: MMCSS (avrt), timer resolution (winmm), router lookup (iphlpapi).
 	target_link_libraries(chiaki avrt winmm iphlpapi ws2_32)
+	# Direct3D 11 renderer (shaders compiled at startup by d3dcompiler_47, part of Windows 10+).
+	target_link_libraries(chiaki d3d11 dxgi d3dcompiler)
 	set(P5M_WIN_VERSION "0.1.0-alpha.1" CACHE STRING "P5M Windows release version")
 	target_compile_definitions(chiaki PRIVATE P5M_WIN_VERSION="${P5M_WIN_VERSION}")
 endif()

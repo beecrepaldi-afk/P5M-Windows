@@ -52,7 +52,7 @@ DialogView {
               } },
             { kind: "choice", label: qsTr("HDR (experimental)"),
               hint: qsTr("Experimental, not tested yet. Uses the display's available extended brightness. Displays without extra headroom use SDR tone mapping. On also asks the PS5 for HDR (H265 HDR codec). Menus keep their look, so nothing switches between menu and game."),
-              shown: () => Qt.platform.os === "osx" && Chiaki.settings.rendererBackend === 2,
+              shown: () => (Qt.platform.os === "osx" || Qt.platform.os === "windows") && Chiaki.settings.rendererBackend === 2,
               options: [qsTr("Off"), qsTr("On")],
               get: () => Chiaki.settings.hdrOutput ? 1 : 0,
               set: (i) => {

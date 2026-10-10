@@ -230,6 +230,11 @@ static bool frame_can_use_direct_render(const AVFrame *frame, bool use_opengl_re
         // The Metal renderer samples the CVPixelBuffer in place.
         return use_metal_renderer;
 #endif
+#ifdef Q_OS_WIN
+    case AV_PIX_FMT_D3D11:
+        // The Direct3D 11 renderer copies the slice on the GPU (same device).
+        return use_metal_renderer;
+#endif
 #ifdef Q_OS_LINUX
     case AV_PIX_FMT_VAAPI:
         return !use_opengl_renderer;
@@ -1155,6 +1160,20 @@ void QmlBackend::createSession(const StreamSessionConnectInfo &connect_info)
         if(session_info.hw_decoder.isEmpty())
             qCInfo(chiakiGui) << "Falling back to software decoder";
     }
+#if defined(Q_OS_WIN)
+    // Direct3D 11 draws only what D3D11VA decodes on its own device (or
+    // software frames): CUDA or Vulkan frames would need a copy between APIs.
+    if (use_metal_renderer && session_info.hw_decoder != "none" && !session_info.hw_decoder.isEmpty()) {
+        session_info.hw_device_ctx = availableDecoders.contains("d3d11va") ? window->nativeHwDeviceCtx() : nullptr;
+        if (session_info.hw_device_ctx) {
+            qCInfo(chiakiGui) << "Direct3D 11 renderer: decoding with d3d11va on the renderer's device";
+            session_info.hw_decoder = "d3d11va";
+        } else {
+            qCInfo(chiakiGui) << "Direct3D 11 renderer: d3d11va unavailable, falling back to software decoder";
+            session_info.hw_decoder.clear();
+        }
+    }
+#endif
 
     try {
         session = new StreamSession(session_info, this);

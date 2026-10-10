@@ -39,7 +39,15 @@ extern "C" {
 Q_DECLARE_LOGGING_CATEGORY(chiakiGui);
 
 class Settings;
+// The platform's own presenter (RenderBackend::Metal / D3D11): same
+// interface on both, so the window drives either one the same way.
+#if defined(Q_OS_WIN)
+class D3D11Renderer;
+using NativeRenderer = D3D11Renderer;
+#else
 class MetalRenderer;
+using NativeRenderer = MetalRenderer;
+#endif
 class StreamSession;
 class QmlBackend;
 class QOffscreenSurface;
@@ -178,6 +186,10 @@ public slots:
     void presentFrame(ChiakiFfmpegFrame frame, int32_t frames_lost, qint64 decoder_delivery_us = 0);
 
     AVBufferRef *vulkanHwDeviceCtx();
+#if defined(Q_OS_WIN)
+    // D3D11VA device context on the Direct3D 11 renderer's own device.
+    AVBufferRef *nativeHwDeviceCtx();
+#endif
 
 signals:
     void fullscreenChanged();
@@ -431,12 +443,14 @@ private:
     VkFormat quick_vk_format = VK_FORMAT_UNDEFINED;
     pl_tex quick_tex = {};
     QOpenGLFramebufferObject *quick_fbo = {};
-#if defined(Q_OS_MACOS)
-    std::unique_ptr<MetalRenderer> metal_renderer;
+#if defined(Q_OS_MACOS) || defined(Q_OS_WIN)
+    std::unique_ptr<NativeRenderer> metal_renderer;
     void scheduleDeferredMetalRender();
     // A decoded frame posted straight to the render thread is waiting to be drawn.
     QAtomicInteger<int> metal_frame_render_queued = 0;
     QAtomicInteger<int> metal_present_deferred = 0;
+#endif
+#if defined(Q_OS_MACOS)
     bool mac_fullscreen = false; // borderless fullscreen (setMacBorderlessFullscreen)
     int hidden_top = 0; // points hidden by the notch strip (macWindowHiddenTop)
 #endif
