@@ -172,6 +172,9 @@ typedef struct chiaki_takion_t
 	ChiakiTakionCallback cb;
 	void *cb_user;
 	chiaki_socket_t sock;
+#ifdef _WIN32
+	unsigned long p5m_qos_flow; // P5M: qWAVE flow id (QOS_FLOWID), 0 = none
+#endif
 	ChiakiThread thread;
 	ChiakiStopPipe stop_pipe;
 	uint32_t tag_local;

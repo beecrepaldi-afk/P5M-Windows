@@ -4,6 +4,8 @@
 #if defined(Q_OS_MACOS)
 #include "metalrenderer.h"
 #include "macStreamActivity.h"
+#elif defined(Q_OS_WIN)
+#include "windowsStreamTuning.h"
 #endif
 #include "chiaki/log.h"
 #include "chiaki/time.h"
@@ -5263,6 +5265,8 @@ renderer_backend_ready:
         quick_render->moveToThread(render_thread);
 #if defined(Q_OS_MACOS)
         QMetaObject::invokeMethod(quick_render, []() { setCurrentThreadUserInteractive(); }, Qt::QueuedConnection);
+#elif defined(Q_OS_WIN)
+        QMetaObject::invokeMethod(quick_render, []() { setCurrentThreadGamePriority(); }, Qt::QueuedConnection);
 #endif
     }
 

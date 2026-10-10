@@ -26,6 +26,8 @@ int main(int argc, char *argv[]) { return real_main(argc, argv); }
 #include "macControllerGestures.h"
 #include "macStreamActivity.h"
 #include "macSettingsMigration.h"
+#elif defined(Q_OS_WIN)
+#include "windowsStreamTuning.h"
 #endif
 
 #ifdef CHIAKI_ENABLE_CLI
@@ -83,6 +85,12 @@ int real_main(int argc, char *argv[])
 	QGuiApplication::setOrganizationName("P5M");
 	QGuiApplication::setApplicationName("P5M");
 	QGuiApplication::setApplicationVersion(P5M_MAC_VERSION);
+	QGuiApplication::setApplicationDisplayName("P5M");
+#elif defined(Q_OS_WIN)
+	// Own settings and logs, apart from an installed chiaki-ng.
+	QGuiApplication::setOrganizationName("P5M");
+	QGuiApplication::setApplicationName("P5M");
+	QGuiApplication::setApplicationVersion(P5M_WIN_VERSION);
 	QGuiApplication::setApplicationDisplayName("P5M");
 #else
 	QGuiApplication::setOrganizationName("Chiaki");
@@ -148,6 +156,10 @@ int real_main(int argc, char *argv[])
 	installMacStreamThreadQos();
 	installMacFullscreenAutoHide();
 	QGuiApplication::setWindowIcon(QIcon(":/icons/chiaking_macos.svg"));
+#elif defined(Q_OS_WIN)
+	QGuiApplication::styleHints()->setTabFocusBehavior(Qt::TabFocusAllControls);
+	installWindowsStreamThreadPriority();
+	QGuiApplication::setWindowIcon(QIcon(":/icons/chiaking.svg"));
 #else
 	QGuiApplication::setWindowIcon(QIcon(":/icons/chiaking.svg"));
 #endif

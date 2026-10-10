@@ -132,7 +132,7 @@ add_dependencies(chiaki-lib chiaki-pb)
 set_target_properties(chiaki-lib PROPERTIES OUTPUT_NAME chiaki)
 
 if(WIN32)
-	target_link_libraries(chiaki-lib wsock32 ws2_32 bcrypt iphlpapi)
+	target_link_libraries(chiaki-lib wsock32 ws2_32 bcrypt iphlpapi qwave)
 	if(NOT CHIAKI_LIB_ENABLE_MBEDTLS)
 		target_link_libraries(chiaki-lib crypt32)
 	endif()

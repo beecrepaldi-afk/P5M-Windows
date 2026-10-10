@@ -1,5 +1,5 @@
 name: Report a problem
-description: Something went wrong in P5M. The "Report a problem" button in the app fills in most of this.
+description: Something went wrong in P5M for Windows. The "Report a problem" button in the app fills in most of this.
 labels: [problem]
 body:
   - type: markdown
@@ -29,7 +29,7 @@ body:
   - type: input
     id: system
     attributes:
-      label: macOS and Mac
+      label: Windows version and PC
   - type: textarea
     id: report
     attributes:

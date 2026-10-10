@@ -1,5 +1,12 @@
 # Authors
 
+## P5M for Windows
+
+Created by **beecrepaldi-afk** (https://github.com/beecrepaldi-afk).
+Shares its streaming core with P5M for macOS (below) and adds the Windows
+quality-of-service flow, MMCSS thread priorities, stream power settings and
+per-network learning on Windows.
+
 ## P5M for macOS
 
 Created by **beecrepaldi-afk** (https://github.com/beecrepaldi-afk).
@@ -15,7 +22,8 @@ measurements and the problem reports.
 
 As permitted by section 7(b) of the GNU Affero General Public License
 version 3, any copy or modified version of P5M for macOS that you convey
-must preserve this author attribution: "P5M for macOS by beecrepaldi-afk",
+must preserve this author attribution: "P5M for macOS by beecrepaldi-afk"
+(and, for P5M for Windows, "P5M for Windows by beecrepaldi-afk"),
 in this file and in the README.
 
 ## Upstream

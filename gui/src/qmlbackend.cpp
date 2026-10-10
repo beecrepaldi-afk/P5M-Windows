@@ -23,6 +23,7 @@
 #include "macSystemIntegration.h"
 #elif defined(Q_OS_WINDOWS)
 #include "windowsWakeSleep.h"
+#include "windowsStreamTuning.h"
 #endif
 #if CHIAKI_GUI_ENABLE_STEAM_SHORTCUT
 #include "steamtools.h"
@@ -457,6 +458,7 @@ QmlBackend::QmlBackend(Settings *settings, QmlMainWindow *window)
     windows_wake_sleep = new WindowsWakeSleep(this);
     connect(windows_wake_sleep, &WindowsWakeSleep::wokeUp, this, &QmlBackend::resumeFromSleep);
     connect(windows_wake_sleep, &WindowsWakeSleep::sleeping, this, &QmlBackend::goToSleep);
+    connect(this, &QmlBackend::sessionChanged, this, [](StreamSession *s) { setWindowsStreamActivity(s != nullptr); });
 #endif
     refreshPsnToken();
 
@@ -2930,7 +2932,11 @@ void QmlBackend::setSystemDiagnosticContext(bool visible)
 }
 
 #ifndef P5M_ISSUES_URL
+#ifdef Q_OS_WIN
+#define P5M_ISSUES_URL "https://github.com/beecrepaldi-afk/P5M-Windows/issues/new"
+#else
 #define P5M_ISSUES_URL "https://github.com/beecrepaldi-afk/P5M-mac/issues/new"
+#endif
 #endif
 
 #ifdef Q_OS_MACOS
@@ -2977,6 +2983,10 @@ QString QmlBackend::reportProblem()
 #ifdef Q_OS_MACOS
     model = P5MSysctlString("hw.model");
     chip = P5MSysctlString("machdep.cpu.brand_string");
+#elif defined(Q_OS_WIN)
+    model = QSysInfo::currentCpuArchitecture();
+    chip = QSettings(QStringLiteral("HKEY_LOCAL_MACHINE\\HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0"),
+        QSettings::NativeFormat).value(QStringLiteral("ProcessorNameString")).toString().trimmed();
 #endif
     const QString system = QSysInfo::prettyProductName();
 
@@ -3003,7 +3013,7 @@ QString QmlBackend::reportProblem()
 
     QFile info(folder.filePath(QStringLiteral("info.txt")));
     if (info.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        info.write(QStringLiteral("P5M %1\n%2\nMac %3\n%4\n").arg(version, system, model, chip).toUtf8());
+        info.write(QStringLiteral("P5M %1\n%2\nMachine %3\n%4\n").arg(version, system, model, chip).toUtf8());
         info.close();
     }
     QFile diary(folder.filePath(QStringLiteral("session.log")));
@@ -3017,12 +3027,26 @@ QString QmlBackend::reportProblem()
         desktop = QDir::homePath();
     const QString zip = QDir(desktop).filePath(name + QStringLiteral(".zip"));
     QFile::remove(zip);
+#ifdef Q_OS_WIN
+    // Windows 10 1803+ ships bsdtar as tar.exe; -a picks the format (zip)
+    // from the name.
+    QDir parent(folder);
+    parent.cdUp();
+    const int rc = QProcess::execute(QStringLiteral("tar.exe"),
+        { QStringLiteral("-a"), QStringLiteral("-c"), QStringLiteral("-f"), QDir::toNativeSeparators(zip),
+          QStringLiteral("-C"), QDir::toNativeSeparators(parent.absolutePath()), name });
+#else
     const int rc = QProcess::execute(QStringLiteral("/usr/bin/ditto"),
         { QStringLiteral("-c"), QStringLiteral("-k"), QStringLiteral("--keepParent"), folder.absolutePath(), zip });
+#endif
     if (rc != 0 || !QFile::exists(zip))
         return tr("Could not create the report.");
 
+#ifdef Q_OS_WIN
+    QProcess::startDetached(QStringLiteral("explorer.exe"), { QStringLiteral("/select,%1").arg(QDir::toNativeSeparators(zip)) });
+#else
     QProcess::startDetached(QStringLiteral("/usr/bin/open"), { QStringLiteral("-R"), zip });
+#endif
 
     // Issue form fields are prefilled through the query (ids from .github/ISSUE_TEMPLATE/problem.yml).
     QUrl url(QStringLiteral(P5M_ISSUES_URL));

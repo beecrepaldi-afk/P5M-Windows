@@ -16,6 +16,8 @@
 #include <QSettings>
 #ifdef Q_OS_MACOS
 #include "macStreamActivity.h"
+#elif defined(Q_OS_WIN)
+#include "windowsStreamTuning.h"
 #endif
 #include <QCoreApplication>
 #include <QPointer>
@@ -496,14 +498,18 @@ StreamSession::StreamSession(const StreamSessionConnectInfo &connect_info, QObje
 	chiaki_connect_info.video_profile = connect_info.video_profile;
 	// Two output blocks queued until this network has taught us better.
 	audio_target_ms = 2.0 * audio_buffer_size / (sizeof(int16_t) * 2) * 1000.0 / audio_out_rate;
-#ifdef Q_OS_MACOS
+#if defined(Q_OS_MACOS) || defined(Q_OS_WIN)
 	{
 		// P5M learning: what this network allowed last time (per router,
 		// home and away apart). The bitrate setting is only where a new
 		// network starts: clean sessions keep climbing until the network
 		// loses packets, and that point becomes the ceiling.
 		const bool local = connect_info.duid.isEmpty() && isLocalAddress(connect_info.host);
+#ifdef Q_OS_MACOS
 		QString net = macNetworkKey();
+#else
+		QString net = windowsNetworkKey();
+#endif
 		if(!net.isEmpty())
 		{
 			learn_key = QStringLiteral("learn/%1-%2").arg(local ? QStringLiteral("local") : QStringLiteral("remote"), net.replace(QLatin1Char(':'), QLatin1Char('-')));

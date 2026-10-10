@@ -97,6 +97,8 @@ elseif(WIN32)
 	list(APPEND SOURCE_FILES
 		include/windowsWakeSleep.h
 		src/windowsWakeSleep.cpp
+		include/windowsStreamTuning.h
+		src/windowsStreamTuning.cpp
 	)
 endif()
 
@@ -218,6 +220,13 @@ endif()
 if(APPLE)
 	target_link_libraries(chiaki "-framework AudioToolbox" "-framework CoreAudio" "-framework AVFoundation" "-framework IOKit"
 		"-framework AppKit" "-framework Metal" "-framework MetalFX" "-framework QuartzCore" "-framework CoreVideo" "-framework GameController" "-framework CoreHaptics" "-framework SystemConfiguration")
+endif()
+
+if(WIN32)
+	# P5M for Windows: MMCSS (avrt), timer resolution (winmm), router lookup (iphlpapi).
+	target_link_libraries(chiaki avrt winmm iphlpapi ws2_32)
+	set(P5M_WIN_VERSION "0.1.0-alpha.1" CACHE STRING "P5M Windows release version")
+	target_compile_definitions(chiaki PRIVATE P5M_WIN_VERSION="${P5M_WIN_VERSION}")
 endif()
 
 if(APPLE)
