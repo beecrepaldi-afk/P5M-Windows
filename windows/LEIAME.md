@@ -1,8 +1,7 @@
 # P5M para Windows — estado do port
 
 Ramo `windows`, criado em 10/10/2026 a partir do commit `699b5798` (beta 4
-do Mac). Worktree em `~/projetos/P5M-windows`; o working tree do Mac
-(`~/projetos/PSMeta-mac`) não foi tocado.
+do Mac).
 
 ## O que vem do Mac sem mudar nada
 
