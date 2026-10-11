@@ -141,7 +141,7 @@ Item {
                     panel.step = 0;
                     break
                 case Chiaki.PsnConnectState.LinkingConsole:
-                    panel.status = view.registOnly ? qsTr("Registering this Mac with the PS5…")
+                    panel.status = view.registOnly ? qsTr("Registering this %1 with the PS5…").arg(Qt.platform.os === "osx" ? qsTr("Mac") : qsTr("PC"))
                                                    : qsTr("Linking with %1 through PSN…").arg(view.consoleName);
                     panel.step = 1;
                     view.allowClose = false;

@@ -71,7 +71,7 @@ jobs:
           version: "6.9.*"
           host: 'windows'
           target: 'desktop'
-          modules: 'qtwebengine qtpositioning qtwebchannel qtwebsockets qtserialport'
+          modules: 'qtwebengine qtpositioning qtwebchannel qtwebsockets qtserialport qtshadertools'
 
       - name: Install pip dependencies
         run: |

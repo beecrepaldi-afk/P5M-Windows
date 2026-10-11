@@ -20,7 +20,7 @@ Pane {
         if(!Chiaki.autoConnect && !root.initialAsk && !Chiaki.window.directStream)
         {
             root.initialAsk = true;
-            if(Chiaki.settings.addSteamShortcutAsk && (typeof Chiaki.createSteamShortcut === "function"))
+            if(Chiaki.settings.addSteamShortcutAsk && Qt.platform.os === "linux" && (typeof Chiaki.createSteamShortcut === "function"))
                 root.showRemindDialog(qsTr("Official Steam artwork + controller layout"), qsTr("Would you like to either create a new non-Steam game for chiaki-ng\nor update an existing non-Steam game with the official artwork and controller layout?") + "\n\n" + qsTr("(Note: If you select no now and want to do this later, click the button or press R3 from the main menu.)"), false, () => root.showSteamShortcutDialog(true));
             else if(Chiaki.settings.remotePlayAsk)
             {
@@ -186,7 +186,7 @@ Pane {
                     Layout.bottomMargin: 16
                     text: hostsView.visibleCount
                         ? qsTr("Pick a console and press ✕. A PS5 in rest mode wakes up on its own.")
-                        : qsTr("Looking for consoles on your network… Your PS5 must be on or in rest mode, on the same network as this Mac.")
+                        : qsTr("Looking for consoles on your network… Your PS5 must be on or in rest mode, on the same network as this %1.").arg(Qt.platform.os === "osx" ? qsTr("Mac") : qsTr("PC"))
                     color: Theme.textSecondary
                     font.pixelSize: Theme.bodySize
                     wrapMode: Text.WordWrap
