@@ -225,6 +225,45 @@ jobs:
           $release_filepath = Get-ChildItem $RELEASE_PACKAGE_FILE | %{$_[0].FullName}
           echo "RELEASE_PACKAGE_PATH=$release_filepath" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
 
+      - name: Smoke test (open the app, screenshot, logs)
+        # No PS5 here: this only shows whether P5M starts, draws its UI and
+        # stays up with each renderer on the runner's basic display adapter.
+        continue-on-error: true
+        env:
+          QT_FORCE_STDERR_LOGGING: "1"
+        run: |
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          New-Item -ItemType Directory -Force -Path smoke | Out-Null
+          function Shot($name) {
+            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+            $bmp.Save("smoke\$name.png", [System.Drawing.Imaging.ImageFormat]::Png)
+            $g.Dispose(); $bmp.Dispose()
+          }
+          foreach ($backend in @('vulkan', 'd3d11')) {
+            New-Item -Path 'HKCU:\Software\P5M\P5M\settings' -Force | Out-Null
+            Set-ItemProperty -Path 'HKCU:\Software\P5M\P5M\settings' -Name 'render_backend' -Value $backend
+            $p = Start-Process -FilePath "P5M-Win\P5M.exe" -PassThru `
+                   -RedirectStandardError "smoke\$backend-stderr.txt" -RedirectStandardOutput "smoke\$backend-stdout.txt"
+            Start-Sleep -Seconds 25
+            Shot $backend
+            if ($p.HasExited) { $state = "exited with code $($p.ExitCode)" } else { $state = "running"; Stop-Process -Id $p.Id -Force }
+            "$backend : $state" | Tee-Object -FilePath smoke\result.txt -Append
+            Start-Sleep -Seconds 3
+          }
+          if (Test-Path "$env:APPDATA\P5M") { Copy-Item -Recurse "$env:APPDATA\P5M" smoke\appdata }
+
+      - name: Upload smoke test
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: P5M-smoke-test
+          path: smoke
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Upload P5M artifact
         uses: actions/upload-artifact@v4
         with:
