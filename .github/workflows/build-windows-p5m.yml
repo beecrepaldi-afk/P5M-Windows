@@ -176,7 +176,7 @@ jobs:
         # Tag win-v0.1.0-alpha.1 -> 0.1.0-alpha.1; other builds carry the commit.
         run: |
           if ("${{ github.ref_type }}" -eq "tag") { $v = "${{ github.ref_name }}" -replace '^win-v', '' }
-          else { $v = "0.1.0-alpha.1+" + "${{ github.sha }}".Substring(0, 8) }
+          else { $v = "0.1.0-alpha.2+" + "${{ github.sha }}".Substring(0, 8) }
           echo "P5M_VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           echo "Version $v"
 
