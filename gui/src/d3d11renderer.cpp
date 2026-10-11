@@ -17,6 +17,7 @@
 #include <QWindow>
 
 #include <atomic>
+#include <iterator>
 #include <chrono>
 #include <condition_variable>
 #include <cmath>
@@ -162,6 +163,19 @@ float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target
 }
 )";
 
+// Coverage: passes only where the UI has any opacity. Counted with an
+// occlusion query whenever Qt redraws the UI, so the UI pass can be skipped
+// while it is empty (most of a game).
+const char kCoverageShader[] = R"(
+Texture2D<float4> t0 : register(t0);
+float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target
+{
+	if (t0.Load(int3(pos.xy, 0)).a <= 0)
+		discard;
+	return 0;
+}
+)";
+
 struct alignas(16) ShaderConstants
 {
 	float row0[4], row1[4], row2[4];
@@ -233,7 +247,27 @@ struct D3D11Renderer::Impl
 	AVBufferRef *hw_device_ctx = nullptr;
 
 	ComPtr<ID3D11VertexShader> vs;
-	ComPtr<ID3D11PixelShader> ps_video, ps_overlay;
+	ComPtr<ID3D11PixelShader> ps_video, ps_overlay, ps_coverage;
+	ComPtr<ID3D11BlendState> blend_nowrite;
+
+	// UI coverage (see kCoverageShader).
+	ComPtr<ID3D11Query> overlay_query;
+	bool overlay_dirty = true;
+	bool overlay_query_pending = false;
+	bool overlay_has_content = true;
+	unsigned overlay_drawn = 0, overlay_skipped = 0;
+
+	// frame->screen: when the decoded picture reached us vs. the vblank that
+	// showed it (DXGI frame statistics, matched by present id).
+	struct PresentRecord { UINT id = 0; LONGLONG arrival = 0, submit = 0; };
+	PresentRecord records[16];
+	unsigned record_next = 0;
+	LONGLONG qpc_freq = 1;
+	LONGLONG video_arrival = 0;
+	bool video_new = false;
+	UINT last_stat_present = 0;
+	double f2s_total = 0, f2s_max = 0, s2s_total = 0, s2s_max = 0;
+	unsigned f2s_count = 0, s2s_count = 0;
 	ComPtr<ID3D11SamplerState> sampler;
 	ComPtr<ID3D11BlendState> blend_overlay;
 	ComPtr<ID3D11RasterizerState> rasterizer;
@@ -345,6 +379,16 @@ struct D3D11Renderer::Impl
 		if (SUCCEEDED(factory.As(&factory5)))
 			factory5->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &tearing, sizeof(tearing));
 		tearing_supported = tearing;
+		// Ask the GPU scheduler to favour us; above 0 may need privileges,
+		// so the diary says what stuck.
+		INT gpu_priority = 0;
+		for (INT p = 7; p > 0; p--) {
+			if (SUCCEEDED(dxgi_device->SetGPUThreadPriority(p))) {
+				gpu_priority = p;
+				break;
+			}
+		}
+		qCInfo(chiakiGui) << "D3D11 renderer: GPU thread priority" << gpu_priority;
 		qCInfo(chiakiGui).nospace() << "D3D11 renderer: " << QString::fromWCharArray(desc.Description)
 		                            << ", feature level " << Qt::hex << int(got) << Qt::dec
 		                            << ", tearing " << (tearing_supported ? "supported" : "unsupported")
@@ -376,8 +420,19 @@ struct D3D11Renderer::Impl
 		ComPtr<ID3DBlob> vsb = compileShader(kVertexShader, "vs_5_0");
 		ComPtr<ID3DBlob> psv = compileShader(kVideoShader, "ps_5_0");
 		ComPtr<ID3DBlob> pso = compileShader(kOverlayShader, "ps_5_0");
-		if (!vsb || !psv || !pso)
+		ComPtr<ID3DBlob> psc = compileShader(kCoverageShader, "ps_5_0");
+		if (!vsb || !psv || !pso || !psc)
 			return false;
+		if (FAILED(device->CreatePixelShader(psc->GetBufferPointer(), psc->GetBufferSize(), nullptr, &ps_coverage)))
+			return false;
+		D3D11_BLEND_DESC nw = {};
+		nw.RenderTarget[0].RenderTargetWriteMask = 0;
+		D3D11_QUERY_DESC qd = { D3D11_QUERY_OCCLUSION, 0 };
+		if (FAILED(device->CreateBlendState(&nw, &blend_nowrite)) || FAILED(device->CreateQuery(&qd, &overlay_query)))
+			return false;
+		LARGE_INTEGER f;
+		QueryPerformanceFrequency(&f);
+		qpc_freq = f.QuadPart;
 		if (FAILED(device->CreateVertexShader(vsb->GetBufferPointer(), vsb->GetBufferSize(), nullptr, &vs))
 		    || FAILED(device->CreatePixelShader(psv->GetBufferPointer(), psv->GetBufferSize(), nullptr, &ps_video))
 		    || FAILED(device->CreatePixelShader(pso->GetBufferPointer(), pso->GetBufferSize(), nullptr, &ps_overlay)))
@@ -548,6 +603,7 @@ struct D3D11Renderer::Impl
 			overlay_tex.Reset();
 			return false;
 		}
+		overlay_dirty = true;
 		return true;
 	}
 
@@ -679,8 +735,16 @@ struct D3D11Renderer::Impl
 			<< QString::number(presents ? present_us_total / presents : 0, 'f', 0) << " us max "
 			<< QString::number(present_us_max, 'f', 0) << " us, mode " << mode
 			<< ", vsync " << (vsync.load() ? "on" : "off") << (hdr_output ? ", HDR10" : "");
+		qCInfo(chiakiGui).nospace()
+			<< "[d3d11] 10s: frame->screen avg " << QString::number(f2s_count ? f2s_total / f2s_count : 0, 'f', 1)
+			<< " max " << QString::number(f2s_max, 'f', 1) << " ms (" << f2s_count << " frames), submit->screen avg "
+			<< QString::number(s2s_count ? s2s_total / s2s_count : 0, 'f', 1) << " max " << QString::number(s2s_max, 'f', 1)
+			<< " ms; UI pass drawn " << overlay_drawn << ", skipped (empty) " << overlay_skipped;
 		stats_since = now;
 		presents = copies = uploads = 0;
+		f2s_total = f2s_max = s2s_total = s2s_max = 0;
+		f2s_count = s2s_count = 0;
+		overlay_drawn = overlay_skipped = 0;
 		present_us_total = present_us_max = 0;
 	}
 };
@@ -804,6 +868,10 @@ bool D3D11Renderer::setVideoFrame(AVFrame *frame)
 		d->video_sar = (frame->sample_aspect_ratio.num > 0 && frame->sample_aspect_ratio.den > 0)
 		               ? av_q2d(frame->sample_aspect_ratio) : 1.0;
 		d->video_valid = true;
+		LARGE_INTEGER now;
+		QueryPerformanceCounter(&now);
+		d->video_arrival = now.QuadPart;
+		d->video_new = true;
 	}
 	av_frame_free(&frame);
 	return ok;
@@ -871,7 +939,33 @@ bool D3D11Renderer::render(bool draw_video, bool draw_overlay, Fit fit, float zo
 		ctx->Draw(3, 0);
 	}
 
-	if (draw_overlay && d->overlay_srv) {
+	if (d->overlay_query_pending) {
+		UINT64 samples = 0;
+		if (ctx->GetData(d->overlay_query.Get(), &samples, sizeof(samples), D3D11_ASYNC_GETDATA_DONOTFLUSH) == S_OK) {
+			d->overlay_has_content = samples > 0;
+			d->overlay_query_pending = false;
+		}
+	}
+	if (d->overlay_dirty && d->overlay_srv) {
+		// Count the UI's covered pixels (no colour written); until the
+		// answer comes back the UI is drawn, to be safe.
+		d->overlay_dirty = false;
+		D3D11_VIEWPORT vp = { 0, 0, float(d->size.width()), float(d->size.height()), 0, 1 };
+		ctx->RSSetViewports(1, &vp);
+		ID3D11ShaderResourceView *srv = d->overlay_srv.Get();
+		ctx->PSSetShaderResources(0, 1, &srv);
+		ctx->PSSetShader(d->ps_coverage.Get(), nullptr, 0);
+		ctx->OMSetBlendState(d->blend_nowrite.Get(), nullptr, 0xffffffff);
+		ctx->Begin(d->overlay_query.Get());
+		ctx->Draw(3, 0);
+		ctx->End(d->overlay_query.Get());
+		d->overlay_query_pending = true;
+		d->overlay_has_content = true;
+	}
+	if (draw_overlay && d->overlay_srv && !d->overlay_has_content)
+		d->overlay_skipped++;
+	if (draw_overlay && d->overlay_srv && d->overlay_has_content) {
+		d->overlay_drawn++;
 		D3D11_VIEWPORT vp = { 0, 0, float(d->size.width()), float(d->size.height()), 0, 1 };
 		ctx->RSSetViewports(1, &vp);
 		if (!(draw_video && d->video_valid)) {
@@ -892,6 +986,10 @@ bool D3D11Renderer::render(bool draw_video, bool draw_overlay, Fit fit, float zo
 
 	const bool vsync = d->vsync.load();
 	const UINT flags = (!vsync && d->tearing_supported) ? DXGI_PRESENT_ALLOW_TEARING : 0;
+	const bool showed_new_video = draw_video && d->video_valid && d->video_new;
+	d->video_new = false;
+	LARGE_INTEGER submit;
+	QueryPerformanceCounter(&submit);
 	const auto t0 = std::chrono::steady_clock::now();
 	HRESULT hr = d->swapchain->Present(vsync ? 1 : 0, flags);
 	const double us = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t0).count();
@@ -911,8 +1009,45 @@ bool D3D11Renderer::render(bool draw_video, bool draw_overlay, Fit fit, float zo
 	d->presents++;
 	d->present_us_total += us;
 	d->present_us_max = std::max(d->present_us_max, us);
+
+	UINT present_id = 0;
+	if (SUCCEEDED(d->swapchain->GetLastPresentCount(&present_id))) {
+		Impl::PresentRecord &r = d->records[d->record_next++ % std::size(d->records)];
+		r.id = present_id;
+		r.submit = submit.QuadPart;
+		r.arrival = showed_new_video ? d->video_arrival : 0;
+	}
+	DXGI_FRAME_STATISTICS st = {};
+	if (SUCCEEDED(d->swapchain->GetFrameStatistics(&st)) && st.PresentCount != d->last_stat_present) {
+		d->last_stat_present = st.PresentCount;
+		for (const Impl::PresentRecord &r : d->records) {
+			if (r.id != st.PresentCount || !r.submit)
+				continue;
+			const double ms = 1000.0 / double(d->qpc_freq);
+			const double s2s = double(st.SyncQPCTime.QuadPart - r.submit) * ms;
+			if (s2s >= 0 && s2s < 1000) {
+				d->s2s_total += s2s;
+				d->s2s_max = std::max(d->s2s_max, s2s);
+				d->s2s_count++;
+			}
+			if (r.arrival) {
+				const double f2s = double(st.SyncQPCTime.QuadPart - r.arrival) * ms;
+				if (f2s >= 0 && f2s < 1000) {
+					d->f2s_total += f2s;
+					d->f2s_max = std::max(d->f2s_max, f2s);
+					d->f2s_count++;
+				}
+			}
+			break;
+		}
+	}
 	d->logStats();
 	return true;
+}
+
+void D3D11Renderer::markOverlayDirty()
+{
+	d->overlay_dirty = true;
 }
 
 void D3D11Renderer::waitIdle()

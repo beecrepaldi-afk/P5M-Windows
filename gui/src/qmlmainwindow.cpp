@@ -6458,6 +6458,10 @@ void QmlMainWindow::endFrame()
     if (render_backend == RenderBackend::Metal) {
         quick_frame = false;
         quick_render->endFrame();
+#if defined(Q_OS_WIN)
+        if (metal_renderer)
+            metal_renderer->markOverlayDirty();
+#endif
         return;
     }
 

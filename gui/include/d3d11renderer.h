@@ -76,6 +76,9 @@ public:
 	// Draws video (if any) and the UI on top, and presents.
 	bool render(bool draw_video, bool draw_overlay, Fit fit, float zoom_factor);
 
+	// Qt redrew the UI: recount whether it covers anything.
+	void markOverlayDirty();
+
 	void waitIdle();
 
 private:
