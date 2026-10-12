@@ -4,7 +4,7 @@ P5M is a PS5 Remote Play app based on chiaki-ng. This is the Windows edition: th
 
 > **Early alpha.** If you try it, please use *Report a problem* — it helps a lot.
 
-## 🙏 Help us test the Direct3D 11 renderer
+## Help us test the Direct3D 11 renderer
 
 P5M has a new renderer built for Windows (Direct3D 11) that should put frames on screen faster than the default (Vulkan). We need real PCs to prove it — **5 minutes of your time helps a lot**:
 

@@ -1,6 +1,6 @@
 **Second Windows alpha of P5M.** Our build machine now opens the app with both renderers on every build and checks the screen, so this one is known to start and draw its interface. If you try it, please tell us how it went with *Report a problem* in the app, even if everything works.
 
-## 🙏 Help us test the Direct3D 11 renderer
+## Help us test the Direct3D 11 renderer
 
 P5M has a new renderer built for Windows (Direct3D 11) that should put frames on screen faster than the default (Vulkan). We need real PCs to prove it — **5 minutes of your time helps a lot**:
 
