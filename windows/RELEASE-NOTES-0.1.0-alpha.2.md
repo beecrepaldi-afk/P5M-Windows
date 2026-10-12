@@ -1,5 +1,17 @@
 **Second Windows alpha of P5M.** Our build machine now opens the app with both renderers on every build and checks the screen, so this one is known to start and draw its interface. If you try it, please tell us how it went with *Report a problem* in the app, even if everything works.
 
+## 🙏 Help us test the Direct3D 11 renderer
+
+P5M has a new renderer built for Windows (Direct3D 11) that should put frames on screen faster than the default (Vulkan). We need real PCs to prove it — **5 minutes of your time helps a lot**:
+
+1. Open P5M and press **Ctrl + ,** (or choose *Settings* with the controller).
+2. Go to **General › Advanced options › Video › Renderer Backend** and pick **Direct3D 11**. P5M restarts.
+3. Connect to your PS5 and **play a real game for about 5 minutes** (menus barely move, so they don't tell us much).
+4. Leave the stream, then press **Report a problem** on the main screen. P5M saves `P5M-report-….zip` to your Desktop — with your addresses, accounts and keys already removed — and opens a form here on GitHub.
+5. Drag the ZIP into the form, add a line about your setup (Wi-Fi or cable, home or away), and submit. A free GitHub account is needed.
+
+Even "it works fine" reports are useful: the diary inside tells us how long each frame takes to reach your screen.
+
 ## New since alpha 1
 
 - Windows wording: "this PC", and the key hints show Enter and Ctrl (they showed Mac keys)
