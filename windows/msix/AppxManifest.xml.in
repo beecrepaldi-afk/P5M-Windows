@@ -41,8 +41,9 @@
     <Capability Name="internetClient" />
     <Capability Name="internetClientServer" />
     <Capability Name="privateNetworkClientServer" />
-    <DeviceCapability Name="microphone" />
-    <!-- A desktop (Qt) app: needed to run outside the app container. -->
+    <!-- A desktop (Qt) app: needed to run outside the app container.
+         The schema wants restricted capabilities before device ones. -->
     <rescap:Capability Name="runFullTrust" />
+    <DeviceCapability Name="microphone" />
   </Capabilities>
 </Package>
