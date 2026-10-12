@@ -238,7 +238,7 @@ if(WIN32)
 	target_link_libraries(chiaki Qt::Network)
 	# Direct3D 11 renderer (shaders compiled at startup by d3dcompiler_47, part of Windows 10+).
 	target_link_libraries(chiaki d3d11 dxgi d3dcompiler)
-	set(P5M_WIN_VERSION "0.1.0-alpha.2" CACHE STRING "P5M Windows release version")
+	set(P5M_WIN_VERSION "0.1.0-alpha.3" CACHE STRING "P5M Windows release version")
 	target_compile_definitions(chiaki PRIVATE P5M_WIN_VERSION="${P5M_WIN_VERSION}")
 endif()
 
