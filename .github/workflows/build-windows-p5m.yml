@@ -212,7 +212,13 @@ jobs:
           Copy-Item "${{ github.workspace }}\${{ env.dep_folder }}\bin\*.dll" P5M-Win
           Get-ChildItem P5M-Win -Filter *.dll | ForEach-Object { $_.Name }
           cp COPYING P5M-Win\LICENSE.txt
-          windeployqt.exe --no-translations --qmldir=gui\src\qml --release P5M-Win\P5M.exe
+          windeployqt.exe --no-translations --no-compiler-runtime --qmldir=gui\src\qml --release P5M-Win\P5M.exe
+          # The Visual C++ runtime next to the app (no vc_redist to install;
+          # the Store package needs it this way too).
+          $crt = Get-ChildItem "$env:VCToolsRedistDir\x64" -Directory -Filter "Microsoft.VC*.CRT" | Select-Object -First 1
+          if (-not $crt) { throw "Visual C++ runtime not found under $env:VCToolsRedistDir" }
+          Copy-Item "$($crt.FullName)\*.dll" P5M-Win
+          Get-ChildItem P5M-Win -Filter "*140*.dll" | ForEach-Object { $_.Name }
 
       - name: Package P5M
         run: |
@@ -255,6 +261,68 @@ jobs:
           }
           if (Test-Path "$env:APPDATA\P5M") { Copy-Item -Recurse "$env:APPDATA\P5M" smoke\appdata }
 
+      - name: Build MSIX (Microsoft Store package)
+        run: |
+          $kit = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Directory -Filter "10.*" |
+                 Where-Object { Test-Path "$($_.FullName)\x64\makeappx.exe" } | Sort-Object Name -Descending | Select-Object -First 1
+          $bin = "$($kit.FullName)\x64"
+          echo "WINSDK_BIN=$bin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $id = @{}
+          Get-Content windows\msix\identity.env | Where-Object { $_ -match '^[^#].*=' } | ForEach-Object { $k, $v = $_ -split '=', 2; $id[$k.Trim()] = $v.Trim() }
+          # Store versions are four numbers ending in 0; the run number keeps them rising.
+          $msix_version = "0.1.${{ github.run_number }}.0"
+          New-Item -ItemType Directory -Force -Path msix-layout | Out-Null
+          Copy-Item -Recurse P5M-Win\* msix-layout\
+          Copy-Item -Recurse windows\msix\Assets msix-layout\Assets
+          $m = [IO.File]::ReadAllText("windows\msix\AppxManifest.xml.in")
+          $m = $m.Replace('@IDENTITY_NAME@', $id.IDENTITY_NAME).Replace('@PUBLISHER@', $id.PUBLISHER)
+          $m = $m.Replace('@PUBLISHER_DISPLAY_NAME@', $id.PUBLISHER_DISPLAY_NAME).Replace('@VERSION@', $msix_version)
+          [IO.File]::WriteAllText("$pwd\msix-layout\AppxManifest.xml", $m)
+          & "$bin\makepri.exe" createconfig /cf priconfig.xml /dq en-US /o
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "$bin\makepri.exe" new /pr msix-layout /cf priconfig.xml /mn msix-layout\AppxManifest.xml /of msix-layout\resources.pri /o
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $name = "P5M-" + ("${env:P5M_VERSION}" -replace '\+', '-') + "-x64.msix"
+          & "$bin\makeappx.exe" pack /d msix-layout /p $name /o
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          echo "MSIX_PATH=$((Get-Item $name).FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "MSIX_IDENTITY_NAME=$($id.IDENTITY_NAME)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "MSIX_PUBLISHER=$($id.PUBLISHER)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "MSIX version $msix_version, identity $($id.IDENTITY_NAME)"
+
+      - name: MSIX smoke test (install like a user, open from Start, screenshot)
+        # A copy signed with a throwaway certificate whose subject matches the
+        # manifest's publisher; the Store signs the real package itself.
+        continue-on-error: true
+        run: |
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          New-Item -ItemType Directory -Force -Path smoke | Out-Null
+          Get-Process P5M -ErrorAction SilentlyContinue | Stop-Process -Force
+          $cert = New-SelfSignedCertificate -Type Custom -Subject $env:MSIX_PUBLISHER -KeyUsage DigitalSignature `
+                    -CertStoreLocation Cert:\CurrentUser\My -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
+          $pw = ConvertTo-SecureString -String "p5m-smoke" -Force -AsPlainText
+          Export-PfxCertificate -Cert $cert -FilePath smoke-test.pfx -Password $pw | Out-Null
+          Export-Certificate -Cert $cert -FilePath smoke-test.cer | Out-Null
+          Import-Certificate -FilePath smoke-test.cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople | Out-Null
+          Copy-Item $env:MSIX_PATH smoke-test.msix
+          & "$env:WINSDK_BIN\signtool.exe" sign /fd SHA256 /f smoke-test.pfx /p p5m-smoke smoke-test.msix
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Add-AppxPackage -Path smoke-test.msix
+          $pkg = Get-AppxPackage -Name $env:MSIX_IDENTITY_NAME
+          "installed: $($pkg.PackageFullName)" | Tee-Object -FilePath smoke\msix-result.txt
+          Start-Process explorer.exe "shell:AppsFolder\$($pkg.PackageFamilyName)!P5M"
+          Start-Sleep -Seconds 25
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          $bmp.Save("smoke\msix.png", [System.Drawing.Imaging.ImageFormat]::Png)
+          $running = Get-Process P5M -ErrorAction SilentlyContinue
+          "running: $([bool]$running)" | Tee-Object -FilePath smoke\msix-result.txt -Append
+          $running | Stop-Process -Force
+          $cache = "$env:LOCALAPPDATA\Packages\$($pkg.PackageFamilyName)\LocalCache"
+          if (Test-Path $cache) { Copy-Item -Recurse $cache smoke\msix-localcache }
+
       - name: Upload smoke test
         if: always()
         uses: actions/upload-artifact@v4
@@ -262,6 +330,14 @@ jobs:
           name: P5M-smoke-test
           path: smoke
           if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload MSIX (for the Microsoft Store)
+        uses: actions/upload-artifact@v4
+        with:
+          name: P5M-msix
+          path: ${{ env.MSIX_PATH }}
+          if-no-files-found: error
           retention-days: 14
 
       - name: Upload P5M artifact
