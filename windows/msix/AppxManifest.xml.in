@@ -34,17 +34,6 @@
         Square44x44Logo="Assets\Square44x44Logo.png">
         <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
       </uap:VisualElements>
-      <Extensions>
-        <!-- Installed with the package, so Windows never asks (and a closed
-             prompt can't hide the PS5): console search replies and the
-             stream come in over UDP, registration over TCP. -->
-        <desktop2:Extension Category="windows.firewallRules">
-          <desktop2:FirewallRules Executable="P5M.exe">
-            <desktop2:Rule Direction="in" IPProtocol="UDP" Profile="all" />
-            <desktop2:Rule Direction="in" IPProtocol="TCP" Profile="all" />
-          </desktop2:FirewallRules>
-        </desktop2:Extension>
-      </Extensions>
     </Application>
   </Applications>
 
@@ -58,4 +47,16 @@
     <rescap:Capability Name="runFullTrust" />
     <DeviceCapability Name="microphone" />
   </Capabilities>
+
+  <Extensions>
+    <!-- Installed with the package, so Windows never asks (and a closed
+         prompt can't hide the PS5): console search replies and the
+         stream come in over UDP, registration over TCP. -->
+    <desktop2:Extension Category="windows.firewallRules">
+      <desktop2:FirewallRules Executable="P5M.exe">
+        <desktop2:Rule Direction="in" IPProtocol="UDP" Profile="all" />
+        <desktop2:Rule Direction="in" IPProtocol="TCP" Profile="all" />
+      </desktop2:FirewallRules>
+    </desktop2:Extension>
+  </Extensions>
 </Package>
