@@ -1,4 +1,4 @@
-**Second Windows alpha of P5M.** Still untested with a PS5 on a real Windows PC. Our build machine now opens the app with both renderers on every build and checks the screen, so this one is known to start and draw its interface. If you try it, please tell us how it went with *Report a problem* in the app, even if everything works.
+**Second Windows alpha of P5M.** Our build machine now opens the app with both renderers on every build and checks the screen, so this one is known to start and draw its interface. If you try it, please tell us how it went with *Report a problem* in the app, even if everything works.
 
 ## New since alpha 1
 
@@ -39,7 +39,6 @@ Windows 10 (1803 or later) or Windows 11, 64-bit. P5M keeps its settings apart f
 
 ## Known limits
 
-- Untested on real hardware; expect rough edges.
 - DualSense haptics over Bluetooth are not supported yet (USB works as in chiaki-ng).
 
 P5M is free software under the GNU AGPL v3, based on chiaki-ng. Not endorsed by Sony Interactive Entertainment.
