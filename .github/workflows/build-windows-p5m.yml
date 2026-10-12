@@ -347,3 +347,11 @@ jobs:
           path: ${{ env.RELEASE_PACKAGE_PATH }}
           if-no-files-found: error
           retention-days: 14
+
+      - name: Upload symbols (for crash reports)
+        uses: actions/upload-artifact@v4
+        with:
+          name: P5M-symbols
+          path: build/gui/chiaki.pdb
+          if-no-files-found: warn
+          retention-days: 90

@@ -302,6 +302,8 @@ struct D3D11Renderer::Impl
 	// Diary.
 	std::chrono::steady_clock::time_point stats_since = std::chrono::steady_clock::now();
 	unsigned presents = 0, copies = 0, uploads = 0;
+	// Logged once: a lost GPU fails every frame after.
+	bool present_failure_logged = false;
 	double present_us_total = 0, present_us_max = 0;
 
 	~Impl()
@@ -1002,8 +1004,15 @@ bool D3D11Renderer::render(bool draw_video, bool draw_overlay, Fit fit, float zo
 	d->waiter_cv.notify_all();
 
 	if (FAILED(hr)) {
-		qCWarning(chiakiGui) << "D3D11 renderer: Present failed" << Qt::hex << hr
-		                     << (hr == DXGI_ERROR_DEVICE_REMOVED ? "(device removed)" : "");
+		if (!d->present_failure_logged) {
+			d->present_failure_logged = true;
+			// Device removed: the driver reset the GPU (a hang or a driver
+			// crash, often while decoding); the reason tells which.
+			const HRESULT reason = (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
+			                       ? d->device->GetDeviceRemovedReason() : S_OK;
+			qCWarning(chiakiGui) << "D3D11 renderer: Present failed" << Qt::hex << hr
+			                     << (hr == DXGI_ERROR_DEVICE_REMOVED ? "(device removed, reason" : "(reason") << reason << ")";
+		}
 		return false;
 	}
 	d->presents++;

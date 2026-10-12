@@ -26,6 +26,7 @@
 #include "windowsStreamTuning.h"
 #include "windowsNetworkReport.h"
 #include "windowsUpdater.h"
+#include "windowsCrashReport.h"
 #endif
 #if CHIAKI_GUI_ENABLE_STEAM_SHORTCUT
 #include "steamtools.h"
@@ -279,12 +280,41 @@ static void P5MAppLogAppend(QtMsgType type, const QString &msg)
     p5m_app_log.append(line);
     if (p5m_app_log.size() > P5M_APP_LOG_LINES)
         p5m_app_log.removeFirst();
+    if (p5m_app_log_file && p5m_app_log_file->size() < P5M_APP_LOG_FILE_MAX) {
+        p5m_app_log_file->write(SanitizeLogMessage(line).toUtf8() + '\n');
+        p5m_app_log_file->flush();
+    }
 }
 
 static QString P5MAppLogText()
 {
     QMutexLocker lock(&p5m_app_log_mutex);
     return p5m_app_log.join(QLatin1Char('\n'));
+}
+
+// The same lines on disk, so a crash still leaves them: p5m-app.log for this
+// run, p5m-app-previous.log for the one before (the one that crashed).
+#define P5M_APP_LOG_FILE_MAX (8 * 1024 * 1024)
+static QFile *p5m_app_log_file = nullptr;
+
+static void P5MAppLogOpenFile(const QString &dir)
+{
+    if (dir.isEmpty())
+        return;
+    const QString path = QDir(dir).filePath(QStringLiteral("p5m-app.log"));
+    const QString previous = QDir(dir).filePath(QStringLiteral("p5m-app-previous.log"));
+    QFile::remove(previous);
+    QFile::rename(path, previous);
+    auto *file = new QFile(path);
+    if (!file->open(QIODevice::WriteOnly | QIODevice::Text)) {
+        delete file;
+        return;
+    }
+    QMutexLocker lock(&p5m_app_log_mutex);
+    for (const QString &line : std::as_const(p5m_app_log))
+        file->write(SanitizeLogMessage(line).toUtf8() + '\n');
+    file->flush();
+    p5m_app_log_file = file;
 }
 
 void P5MAppLog(const QString &msg)
@@ -359,6 +389,10 @@ QmlBackend::QmlBackend(Settings *settings, QmlMainWindow *window)
     , window(window)
 {
     qt_msg_handler = qInstallMessageHandler(msg_handler);
+    P5MAppLogOpenFile(GetLogBaseDir());
+#ifdef Q_OS_WIN
+    installWindowsCrashReport(GetLogBaseDir(), QCoreApplication::applicationVersion());
+#endif
 
 #ifdef Q_OS_WIN
     {
@@ -3075,16 +3109,31 @@ QString QmlBackend::reportProblem()
 #endif
     const QString system = QSysInfo::prettyProductName();
 
-    // Newest diary: names carry the date, so the last one sorted is the newest.
+    // The newest diaries (names carry the date, so sorted = oldest first):
+    // the session that went wrong is not always the last one, e.g. after a
+    // crash the user plays again before reporting.
     QString diary_text;
+    QStringList older_diaries, crashes;
+    QString previous_app_log;
     const QString log_dir = GetLogBaseDir();
+    auto readSanitized = [](const QString &path) {
+        QFile f(path);
+        return f.open(QIODevice::ReadOnly) ? P5MReportSanitize(QString::fromUtf8(f.readAll())) : QString();
+    };
     if (!log_dir.isEmpty()) {
-        const QStringList logs = QDir(log_dir).entryList({ QStringLiteral("chiaki_session_*.log") }, QDir::Files, QDir::Name);
-        if (!logs.isEmpty()) {
-            QFile f(QDir(log_dir).filePath(logs.last()));
-            if (f.open(QIODevice::ReadOnly))
-                diary_text = P5MReportSanitize(QString::fromUtf8(f.readAll()));
+        const QDir dir(log_dir);
+        const QStringList logs = dir.entryList({ QStringLiteral("chiaki_session_*.log") }, QDir::Files, QDir::Name);
+        for (int i = logs.size() - 1, n = 0; i >= 0 && n < 3; i--, n++) {
+            const QString text = readSanitized(dir.filePath(logs.at(i)));
+            if (n == 0)
+                diary_text = text;
+            else
+                older_diaries << text;
         }
+        const QStringList crash_files = dir.entryList({ QStringLiteral("crash-*.txt") }, QDir::Files, QDir::Name);
+        for (int i = crash_files.size() - 1, n = 0; i >= 0 && n < 3; i--, n++)
+            crashes << crash_files.at(i) + QStringLiteral("\n") + readSanitized(dir.filePath(crash_files.at(i)));
+        previous_app_log = readSanitized(dir.filePath(QStringLiteral("p5m-app-previous.log")));
     }
 
     // Console names often carry the owner's name; the account ID is personal.
@@ -3107,6 +3156,9 @@ QString QmlBackend::reportProblem()
         return text;
     };
     diary_text = hidePersonal(diary_text);
+    for (QString &text : older_diaries)
+        text = hidePersonal(text);
+    previous_app_log = hidePersonal(previous_app_log);
 
     const QString stamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd_HH-mm"));
     const QString name = QStringLiteral("P5M-report-%1").arg(stamp);
@@ -3126,6 +3178,18 @@ QString QmlBackend::reportProblem()
         for (const auto &host : std::as_const(psn_hosts))
             if (!host.IsPS5() || settings->GetNicknameRegisteredHostRegistered(host.GetName()))
                 psn_registered++;
+        const RenderBackend backend = settings->GetRenderBackend();
+        const QString decoder = settings->GetHardwareDecoder();
+        info.write(QStringLiteral("\nRenderer %1\nDecoder setting %2\n").arg(
+            backend == RenderBackend::Vulkan ? QStringLiteral("Vulkan") : backend == RenderBackend::OpenGL ? QStringLiteral("OpenGL")
+#ifdef Q_OS_WIN
+                : QStringLiteral("Direct3D 11"),
+#else
+                : QStringLiteral("Metal"),
+#endif
+            decoder.isEmpty() ? QStringLiteral("none") : decoder).toUtf8());
+        if (!crashes.isEmpty())
+            info.write(QStringLiteral("Crashes recorded: %1 (see crash*.txt)\n").arg(crashes.size()).toUtf8());
         QString state = QStringLiteral("\nConsole search %1\nFound on the local network: %2\nAdded by address: %3\nRegistered consoles: %4\nPSN sign-in: %5\nPSN consoles: %6 (%7 registered)\n")
             .arg(discoveryEnabled() ? QStringLiteral("on") : QStringLiteral("off"))
             .arg(discovery_manager.GetHosts().size())
@@ -3139,6 +3203,16 @@ QString QmlBackend::reportProblem()
         info.write(hidePersonal(P5MReportSanitize(state)).toUtf8());
         info.close();
     }
+    auto writeFile = [&folder](const QString &file_name, const QString &text) {
+        QFile f(folder.filePath(file_name));
+        if (!text.isEmpty() && f.open(QIODevice::WriteOnly | QIODevice::Text))
+            f.write(text.toUtf8());
+    };
+    for (int i = 0; i < older_diaries.size(); i++)
+        writeFile(QStringLiteral("session-older-%1.log").arg(i + 1), older_diaries.at(i));
+    for (int i = 0; i < crashes.size(); i++)
+        writeFile(QStringLiteral("crash-%1.txt").arg(i + 1), crashes.at(i));
+    writeFile(QStringLiteral("app-previous-run.log"), previous_app_log);
     QFile app_log(folder.filePath(QStringLiteral("app.log")));
     if (app_log.open(QIODevice::WriteOnly | QIODevice::Text)) {
         app_log.write(hidePersonal(P5MReportSanitize(P5MAppLogText())).toUtf8());

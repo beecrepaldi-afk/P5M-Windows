@@ -103,6 +103,8 @@ elseif(WIN32)
 		src/windowsNetworkReport.cpp
 		include/windowsUpdater.h
 		src/windowsUpdater.cpp
+		include/windowsCrashReport.h
+		src/windowsCrashReport.cpp
 		include/d3d11renderer.h
 		src/d3d11renderer.cpp
 	)
@@ -233,6 +235,12 @@ if(WIN32)
 	target_link_libraries(chiaki avrt winmm iphlpapi ws2_32)
 	# Report a problem: network category and firewall rules (COM).
 	target_link_libraries(chiaki ole32 oleaut32)
+	# Symbols for crash reports (crash-*.txt carry module+offset): a PDB kept
+	# as a CI artifact, never shipped; same optimizations.
+	if(MSVC)
+		target_compile_options(chiaki PRIVATE /Z7)
+		target_link_options(chiaki PRIVATE /DEBUG /OPT:REF /OPT:ICF)
+	endif()
 	# Updates: GitHub releases API and the download.
 	find_package(Qt6 REQUIRED COMPONENTS Network)
 	target_link_libraries(chiaki Qt::Network)
