@@ -264,6 +264,9 @@ static QtMessageHandler qt_msg_handler = nullptr;
 #define P5M_APP_LOG_LINES 3000
 static QMutex p5m_app_log_mutex;
 static QStringList p5m_app_log;
+// The same lines on disk (see P5MAppLogOpenFile).
+#define P5M_APP_LOG_FILE_MAX (8 * 1024 * 1024)
+static QFile *p5m_app_log_file = nullptr;
 
 static void P5MAppLogAppend(QtMsgType type, const QString &msg)
 {
@@ -294,8 +297,6 @@ static QString P5MAppLogText()
 
 // The same lines on disk, so a crash still leaves them: p5m-app.log for this
 // run, p5m-app-previous.log for the one before (the one that crashed).
-#define P5M_APP_LOG_FILE_MAX (8 * 1024 * 1024)
-static QFile *p5m_app_log_file = nullptr;
 
 static void P5MAppLogOpenFile(const QString &dir)
 {
