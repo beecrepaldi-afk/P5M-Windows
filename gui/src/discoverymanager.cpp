@@ -18,6 +18,10 @@
 #include <ifaddrs.h>
 #endif
 
+#include <QTimer>
+
+void P5MAppLog(const QString &msg);
+
 #define PING_MS		500
 #define HOSTS_MAX	16
 #define DROP_PINGS	3
@@ -38,7 +42,11 @@ static void DiscoveryServiceHostsManualCallback(ChiakiDiscoveryHost *hosts, size
 
 DiscoveryManager::DiscoveryManager(QObject *parent) : QObject(parent)
 {
-	chiaki_log_init(&log, CHIAKI_LOG_ALL & ~CHIAKI_LOG_VERBOSE, chiaki_log_cb_print, nullptr);
+	// Also into the app log, so Report a problem shows the console search.
+	chiaki_log_init(&log, CHIAKI_LOG_ALL & ~CHIAKI_LOG_VERBOSE, [](ChiakiLogLevel level, const char *msg, void *user) {
+		chiaki_log_cb_print(level, msg, user);
+		P5MAppLog(QStringLiteral("discovery [%1] %2").arg(QLatin1Char(chiaki_log_level_char(level)), QString::fromUtf8(msg).trimmed()));
+	}, nullptr);
 
 	service_active = false;
 	service_active_ipv6 = false;
@@ -110,6 +118,7 @@ void DiscoveryManager::SetActive(bool active)
 				while (pAdapter) {
 					if(pAdapter->Type != IF_TYPE_IEEE80211 && pAdapter->Type != MIB_IF_TYPE_ETHERNET)
 					{
+						P5MAppLog(QStringLiteral("discovery: skipping adapter \"%1\" (type %2)").arg(QString::fromLocal8Bit(pAdapter->Description)).arg(pAdapter->Type));
 						pAdapter = pAdapter->Next;
 						continue;
 					}
@@ -135,6 +144,25 @@ void DiscoveryManager::SetActive(bool active)
 						inet_ntop(AF_INET, &loc_broadcast, address, INET_ADDRSTRLEN);
 						if(!broadcast_addresses.contains(final))
 							broadcast_addresses.append(final);
+						// The address itself would be removed from the report: keep
+						// the subnet size and the kind of range, enough to spot a
+						// guest network, a VPN or a virtual adapter.
+						{
+							int prefix = 0;
+							for(int i = 0; i < 4; i++)
+								for(int b = 7; b >= 0; b--)
+									prefix += (loc_mask[i] >> b) & 1;
+							const char *range = loc_address[0] == 10 ? "10.x private"
+								: (loc_address[0] == 172 && (loc_address[1] & 0xf0) == 16) ? "172.16-31.x private"
+								: (loc_address[0] == 192 && loc_address[1] == 168) ? "192.168.x private"
+								: (loc_address[0] == 169 && loc_address[1] == 254) ? "169.254.x link-local (no DHCP)"
+								: (loc_address[0] == 100 && (loc_address[1] & 0xc0) == 64) ? "100.64-127.x carrier/VPN"
+								: "other";
+							P5MAppLog(QStringLiteral("discovery: broadcasting on \"%1\" (%2), /%3, %4")
+								.arg(QString::fromLocal8Bit(pAdapter->Description),
+									pAdapter->Type == IF_TYPE_IEEE80211 ? QStringLiteral("Wi-Fi") : QStringLiteral("Ethernet"))
+								.arg(prefix).arg(QString::fromLatin1(range)));
+						}
 						status = true;
 					}
 					pAdapter = pAdapter->Next;
@@ -200,9 +228,15 @@ void DiscoveryManager::SetActive(bool active)
 			}
 			else
 				CHIAKI_LOGW(&log, "No external broadcast addresses found!");
+			const int broadcast_count = options.broadcast_num;
 			ChiakiErrorCode err = chiaki_discovery_service_init(&service, &options, &log);
 			if(options.broadcast_addrs)
 				free(options.broadcast_addrs);
+			P5MAppLog(QStringLiteral("discovery: started, %1 local network(s)").arg(broadcast_count));
+			QTimer::singleShot(15000, this, [this, broadcast_count]() {
+				if(service_active && this->hosts.isEmpty())
+					P5MAppLog(QStringLiteral("discovery: no console answered in 15 s on %1 local network(s); a firewall blocking P5M, a guest/other network or a VPN are the usual causes").arg(broadcast_count));
+			});
 			if(err != CHIAKI_ERR_SUCCESS)
 			{
 				service_active = false;
@@ -315,6 +349,15 @@ const QList<DiscoveryHost> DiscoveryManager::GetHosts() const
 
 void DiscoveryManager::DiscoveryServiceHosts(QList<DiscoveryHost> hosts)
 {
+	if(hosts.size() != this->hosts.size())
+	{
+		QStringList found;
+		for(const auto &host : std::as_const(hosts))
+			found.append(QStringLiteral("%1 %2").arg(host.ps5 ? QStringLiteral("PS5") : QStringLiteral("PS4"),
+				host.state == CHIAKI_DISCOVERY_HOST_STATE_READY ? QStringLiteral("ready")
+				: host.state == CHIAKI_DISCOVERY_HOST_STATE_STANDBY ? QStringLiteral("rest mode") : QStringLiteral("unknown")));
+		P5MAppLog(QStringLiteral("discovery: %1 console(s) answered%2").arg(hosts.size()).arg(found.isEmpty() ? QString() : QStringLiteral(": ") + found.join(QStringLiteral(", "))));
+	}
 	this->hosts = std::move(hosts);
 	emit HostsUpdated();
 }

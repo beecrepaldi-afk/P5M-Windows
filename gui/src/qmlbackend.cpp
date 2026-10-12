@@ -24,6 +24,7 @@
 #elif defined(Q_OS_WINDOWS)
 #include "windowsWakeSleep.h"
 #include "windowsStreamTuning.h"
+#include "windowsNetworkReport.h"
 #endif
 #if CHIAKI_GUI_ENABLE_STEAM_SHORTCUT
 #include "steamtools.h"
@@ -54,6 +55,9 @@
 #endif
 #include <QtConcurrent>
 #include <QTimer>
+#include <QTime>
+
+#include <algorithm>
 
 extern "C" {
 #include <chiaki/time.h>
@@ -253,8 +257,43 @@ static QMutex chiaki_log_mutex;
 static ChiakiLog *chiaki_log_ctx = nullptr;
 static QtMessageHandler qt_msg_handler = nullptr;
 
+// The last app log lines, for Report a problem: a console that is never found
+// leaves no session diary, so the report needs the search itself.
+#define P5M_APP_LOG_LINES 3000
+static QMutex p5m_app_log_mutex;
+static QStringList p5m_app_log;
+
+static void P5MAppLogAppend(QtMsgType type, const QString &msg)
+{
+    char level = 'D';
+    switch (type) {
+    case QtInfoMsg: level = 'I'; break;
+    case QtWarningMsg: level = 'W'; break;
+    case QtCriticalMsg:
+    case QtFatalMsg: level = 'E'; break;
+    default: break;
+    }
+    const QString line = QStringLiteral("%1 [%2] %3").arg(QTime::currentTime().toString(QStringLiteral("HH:mm:ss.zzz")), QLatin1Char(level), msg);
+    QMutexLocker lock(&p5m_app_log_mutex);
+    p5m_app_log.append(line);
+    if (p5m_app_log.size() > P5M_APP_LOG_LINES)
+        p5m_app_log.removeFirst();
+}
+
+static QString P5MAppLogText()
+{
+    QMutexLocker lock(&p5m_app_log_mutex);
+    return p5m_app_log.join(QLatin1Char('\n'));
+}
+
+void P5MAppLog(const QString &msg)
+{
+    P5MAppLogAppend(QtInfoMsg, msg);
+}
+
 static void msg_handler(QtMsgType type, const QMessageLogContext &context, const QString &msg)
 {
+    P5MAppLogAppend(type, msg);
     QMutexLocker lock(&chiaki_log_mutex);
     if (!chiaki_log_ctx) {
         qt_msg_handler(type, context, msg);
@@ -899,7 +938,9 @@ QVariantList QmlBackend::hosts() const
         m["name"] = host.GetName();
         m["duid"] = host.GetDuid();
         m["address"] = "";
-        m["registered"] = true;
+        // PSN also lists consoles not registered yet: they register over the
+        // PSN tunnel, so they no longer have to be found on the local network.
+        m["registered"] = !host.IsPS5() || settings->GetNicknameRegisteredHostRegistered(host.GetName());
         m["ps5"] = host.IsPS5();
         out.append(m);
     }
@@ -1506,7 +1547,7 @@ void QmlBackend::autoRegister()
     resume_session = false;
     StreamSessionConnectInfo info(
             settings,
-            server.discovery_host.target,
+            server.discovered ? server.discovery_host.target : server.psn_host.GetTarget(),
             QString(),
             QString(),
             QByteArray(),
@@ -1549,7 +1590,7 @@ void QmlBackend::autoRegister()
 void QmlBackend::finishAutoRegister(const ChiakiRegisteredHost &host)
 {
     QString nickname(host.server_nickname);
-    if(!regist_dialog_server.discovery_host.ps5 && regist_dialog_server.discovery_host.host_name != nickname)
+    if(regist_dialog_server.discovered && !regist_dialog_server.discovery_host.ps5 && regist_dialog_server.discovery_host.host_name != nickname)
     {
         emit error(tr("PS4 Console Not Main"), tr("Can't proceed...%1 is not your main PS4 console in PSN").arg(regist_dialog_server.discovery_host.host_name));
         return;
@@ -1613,6 +1654,13 @@ void QmlBackend::connectToHost(int index, QString nickname)
 
     if (!server.registered) {
         regist_dialog_server = server;
+        if (!server.discovered && !server.psn_host.GetDuid().isEmpty()) {
+            // Only known through PSN: there is no address to ask a PIN for,
+            // so register over the PSN tunnel straight away.
+            qCInfo(chiakiGui) << "Registering a PSN console over the PSN tunnel";
+            autoRegister();
+            return;
+        }
         emit registDialogRequested(server.GetHostAddr(), server.IsPS5(), server.duid);
         return;
     }
@@ -1894,8 +1942,9 @@ QmlBackend::DisplayServer QmlBackend::displayServerAt(int index) const
                 server.discovered = false;
                 server.psn_host = std::move(psn_host);
                 server.duid = i.key();
-                server.registered = true;
-                server.registered_host = settings->GetNicknameRegisteredHost(server.psn_host.GetName());
+                server.registered = !server.psn_host.IsPS5() || settings->GetNicknameRegisteredHostRegistered(server.psn_host.GetName());
+                if (server.registered)
+                    server.registered_host = settings->GetNicknameRegisteredHost(server.psn_host.GetName());
                 return server;
             }
             j++;
@@ -2703,7 +2752,10 @@ void QmlBackend::updatePsnHostsThread()
         ChiakiHolepunchDeviceInfo dev = device_info_ps5[i];
         // skip devices that don't have remote play enabled
         if(!dev.remoteplay_enabled)
+        {
+            qCInfo(chiakiGui) << "PSN console: PS5, remote play off on the console, skipped";
             continue;
+        }
         QByteArray duid_bytes(reinterpret_cast<char*>(dev.device_uid), sizeof(dev.device_uid));
         QString duid = QString(duid_bytes.toHex());
         QString name = QString(dev.device_name);
@@ -2711,8 +2763,10 @@ void QmlBackend::updatePsnHostsThread()
         PsnHost psn_host(duid, name, ps5);
         if(!psn_nickname_hosts.contains(name))
             psn_nickname_hosts.insert(name, psn_host);
-	    if(!psn_hosts.contains(duid) && settings->GetNicknameRegisteredHostRegistered(name))
-		    psn_hosts.insert(duid, psn_host);
+        // Unregistered PS5s are listed too and register over PSN on ✕.
+        if(!psn_hosts.contains(duid))
+            psn_hosts.insert(duid, psn_host);
+        qCInfo(chiakiGui) << "PSN console: PS5, remote play on," << (settings->GetNicknameRegisteredHostRegistered(name) ? "registered" : "not registered");
     }
     QByteArray duid_bytes(32, 'A');
     QString duid = QString(duid_bytes.toHex());
@@ -2725,7 +2779,7 @@ void QmlBackend::updatePsnHostsThread()
         psn_hosts.insert(duid, psn_host);
 
     emit hostsChanged();
-    qCInfo(chiakiGui) << "Updated PSN hosts";
+    qCInfo(chiakiGui) << "Updated PSN hosts:" << num_devices_ps5 << "PS5 on the account";
     if(device_info_ps5)
         chiaki_holepunch_free_device_list(&device_info_ps5);
 }
@@ -2977,11 +3031,13 @@ static QString P5MReportSanitize(const QString &text)
 {
     static const QRegularExpression console_id(R"(\b[0-9A-Fa-f]{12}\b)");
     static const QRegularExpression session_id(R"((session id\s+)\S+)", QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression windows_home(R"(([A-Za-z]:[\\/]+Users[\\/]+)[^\\/\s"]+)", QRegularExpression::CaseInsensitiveOption);
     QStringList lines = text.split(QLatin1Char('\n'));
     for (QString &line : lines) {
         line = SanitizeLogMessage(line);
         line.replace(console_id, QStringLiteral("<console-id>"));
         line.replace(session_id, QStringLiteral("\\1<redacted>"));
+        line.replace(windows_home, QStringLiteral("\\1<redacted-user>"));
     }
     return lines.join(QLatin1Char('\n'));
 }
@@ -3021,6 +3077,27 @@ QString QmlBackend::reportProblem()
         }
     }
 
+    // Console names often carry the owner's name; the account ID is personal.
+    QStringList personal;
+    for (const auto &host : settings->GetRegisteredHosts())
+        personal << host.GetServerNickname();
+    for (const auto &host : std::as_const(psn_hosts))
+        personal << host.GetName();
+    for (const auto &host : discovery_manager.GetHosts())
+        personal << host.host_name;
+    personal << settings->GetPsnAccountId();
+    personal.removeAll(QString());
+    personal.removeDuplicates();
+    // Longest first, so a name is not left half replaced by a shorter one.
+    std::sort(personal.begin(), personal.end(), [](const QString &a, const QString &b) { return a.size() > b.size(); });
+    auto hidePersonal = [&personal](QString text) {
+        for (const auto &word : std::as_const(personal))
+            if (word.size() >= 5)
+                text.replace(word, QStringLiteral("<console-or-account>"), Qt::CaseInsensitive);
+        return text;
+    };
+    diary_text = hidePersonal(diary_text);
+
     const QString stamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd_HH-mm"));
     const QString name = QStringLiteral("P5M-report-%1").arg(stamp);
     QTemporaryDir tmp;
@@ -3033,7 +3110,29 @@ QString QmlBackend::reportProblem()
     QFile info(folder.filePath(QStringLiteral("info.txt")));
     if (info.open(QIODevice::WriteOnly | QIODevice::Text)) {
         info.write(QStringLiteral("P5M %1\n%2\nMachine %3\n%4\n").arg(version, system, model, chip).toUtf8());
+        // Where the console search stands: most reports without a diary are
+        // "my PS5 does not show up".
+        int psn_registered = 0;
+        for (const auto &host : std::as_const(psn_hosts))
+            if (!host.IsPS5() || settings->GetNicknameRegisteredHostRegistered(host.GetName()))
+                psn_registered++;
+        QString state = QStringLiteral("\nConsole search %1\nFound on the local network: %2\nAdded by address: %3\nRegistered consoles: %4\nPSN sign-in: %5\nPSN consoles: %6 (%7 registered)\n")
+            .arg(discoveryEnabled() ? QStringLiteral("on") : QStringLiteral("off"))
+            .arg(discovery_manager.GetHosts().size())
+            .arg(settings->GetManualHosts().size())
+            .arg(settings->GetRegisteredHosts().size())
+            .arg(settings->GetPsnAuthToken().isEmpty() ? QStringLiteral("no") : QStringLiteral("yes"))
+            .arg(psn_hosts.size()).arg(psn_registered);
+#ifdef Q_OS_WIN
+        state += QStringLiteral("\n") + windowsNetworkReport() + QStringLiteral("\n");
+#endif
+        info.write(hidePersonal(P5MReportSanitize(state)).toUtf8());
         info.close();
+    }
+    QFile app_log(folder.filePath(QStringLiteral("app.log")));
+    if (app_log.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        app_log.write(hidePersonal(P5MReportSanitize(P5MAppLogText())).toUtf8());
+        app_log.close();
     }
     QFile diary(folder.filePath(QStringLiteral("session.log")));
     if (diary.open(QIODevice::WriteOnly | QIODevice::Text)) {
@@ -3076,7 +3175,7 @@ QString QmlBackend::reportProblem()
     url.setQuery(query);
     QDesktopServices::openUrl(url);
 
-    return tr("The report %1 is on your Desktop. Your browser opened a new issue: describe what happened and drag the file onto it.\n\nThe diary inside has addresses, accounts and keys removed. You need a free GitHub account to send it.").arg(name + QStringLiteral(".zip"));
+    return tr("The report %1 is on your Desktop. Your browser opened a new issue: describe what happened and drag the file onto it.\n\nThe files inside have addresses, accounts and keys removed. You need a free GitHub account to send it.").arg(name + QStringLiteral(".zip"));
 }
 
 void QmlBackend::showSystemDiagnostics()

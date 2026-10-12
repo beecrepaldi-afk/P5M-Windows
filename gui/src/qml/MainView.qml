@@ -186,7 +186,26 @@ Pane {
                     Layout.bottomMargin: 16
                     text: hostsView.visibleCount
                         ? qsTr("Pick a console and press ✕. A PS5 in rest mode wakes up on its own.")
-                        : qsTr("Looking for consoles on your network… Your PS5 must be on or in rest mode, on the same network as this %1.").arg(Qt.platform.os === "osx" ? qsTr("Mac") : qsTr("PC"))
+                        : !searchSlow.slow
+                        ? qsTr("Looking for consoles on your network… Your PS5 must be on or in rest mode, on the same network as this %1.").arg(Qt.platform.os === "osx" ? qsTr("Mac") : qsTr("PC"))
+                        : (Qt.platform.os === "windows"
+                            ? qsTr("No console found yet. Windows Firewall is the usual cause: in Windows Security › Firewall & network protection › Allow an app through firewall, tick Private and Public for P5M, and set your home network to Private. No VPN or guest Wi-Fi.")
+                            : qsTr("No console found yet. Check that your PS5 is on, on the same network, with no VPN or guest Wi-Fi."))
+                          + " " + (Chiaki.settings.psnAuthToken
+                            ? qsTr("You can also press Add console by address.")
+                            : qsTr("You can also press Add console by address, or sign in to PSN (Settings › General › Remote play (PSN)) to register your PS5 from anywhere."))
+                    // Turns the search text into help after 15 s with nothing found.
+                    Timer {
+                        id: searchSlow
+                        property bool slow: false
+                        interval: 15000
+                        running: hostsView.visibleCount === 0 && Chiaki.discoveryEnabled && !slow
+                        onTriggered: slow = true
+                    }
+                    Connections {
+                        target: hostsView
+                        function onVisibleCountChanged() { if (hostsView.visibleCount) searchSlow.slow = false; }
+                    }
                     color: Theme.textSecondary
                     font.pixelSize: Theme.bodySize
                     wrapMode: Text.WordWrap
@@ -331,11 +350,11 @@ Pane {
                                         Text {
                                             id: statusText
                                             text: {
-                                                if (delegate.remote)
-                                                    return qsTr("Remote, through PSN");
                                                 if (!modelData.registered)
                                                     return modelData.duid ? qsTr("Not registered yet: press ✕ to register automatically")
                                                                           : qsTr("Not registered yet: press ✕ to register");
+                                                if (delegate.remote)
+                                                    return qsTr("Remote, through PSN");
                                                 if (modelData.state == "ready")
                                                     return qsTr("Ready");
                                                 if (modelData.state == "standby")
@@ -343,10 +362,10 @@ Pane {
                                                 return qsTr("Not found on the network");
                                             }
                                             color: {
-                                                if (delegate.remote)
-                                                    return Theme.active;
                                                 if (!modelData.registered)
                                                     return Theme.warning;
+                                                if (delegate.remote)
+                                                    return Theme.active;
                                                 if (modelData.state == "ready")
                                                     return Theme.good;
                                                 if (modelData.state == "standby")
@@ -387,7 +406,7 @@ Pane {
                                         button: "cross"
                                         key: "Return"
                                         controller: Chiaki.controllers.length > 0
-                                        text: modelData.registered || delegate.remote ? qsTr("Play") : qsTr("Register")
+                                        text: modelData.registered ? qsTr("Play") : qsTr("Register")
                                     }
                                     Hint {
                                         visible: delegate.canWake
