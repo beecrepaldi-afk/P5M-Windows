@@ -9,7 +9,7 @@ P5M is a free, open-source Remote Play app for the PlayStation 5. It has no acco
 - **Your PS5.** P5M finds your console on your local network and streams video, audio and controller input directly between your PC and your PS5. When you unmute the microphone in a stream, your microphone audio is sent to your PS5 only.
 - **Sony (PlayStation Network)** — only if you choose to sign in to PSN, to register your console automatically or to play away from home. Sign-in happens on Sony's own page, and the access token P5M receives is stored on your PC only. Remote play then uses Sony's servers to reach your console, and your router (UPnP) and public STUN servers (Google's, and a public list fetched from GitHub) to set up the connection.
 - **psn.flipscreen.games** — only if, while signing in to PSN, you look up your PSN account ID by username: the username you type is sent to that third-party service to find the ID.
-- **GitHub** — only if you press *Report a problem*. P5M saves a report file on your Desktop and opens a GitHub page in your browser. Nothing is uploaded unless you attach the file and submit the form yourself.
+- **GitHub** — the portable version asks GitHub's public releases list whether a newer P5M exists, when it opens and twice a day (turn it off in Settings › General › Check for updates), and downloads the new version from GitHub only when you press *Update*. The Microsoft Store version never checks; the Store updates it. If you press *Report a problem*, P5M saves a report file on your Desktop and opens a GitHub page in your browser. Nothing is uploaded unless you attach the file and submit the form yourself.
 
 ## What stays on your PC
 

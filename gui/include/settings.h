@@ -400,6 +400,13 @@ class Settings : public QObject
 		RegisteredHost GetAutoConnectHost() const;
 		void SetAutoConnectHost(const QByteArray &mac);
 
+		// P5M for Windows: look for new versions on GitHub.
+		bool GetCheckForUpdates() const;
+		void SetCheckForUpdates(bool enabled);
+		// A version the user chose to skip: only a newer one is offered.
+		QString GetSkippedUpdate() const;
+		void SetSkippedUpdate(const QString &version);
+
 		bool GetMacSpatialAudio() const;
 		void SetMacSpatialAudio(bool enabled);
 		bool GetMacHeadTracking() const;

@@ -844,6 +844,26 @@ void Settings::SetHardwareDecoder(const QString &hw_decoder)
 	settings.setValue("settings/hw_decoder", hw_decoder);
 }
 
+bool Settings::GetCheckForUpdates() const
+{
+	return settings.value("settings/p5m_check_for_updates", true).toBool();
+}
+
+void Settings::SetCheckForUpdates(bool enabled)
+{
+	settings.setValue("settings/p5m_check_for_updates", enabled);
+}
+
+QString Settings::GetSkippedUpdate() const
+{
+	return settings.value("settings/p5m_skipped_update").toString();
+}
+
+void Settings::SetSkippedUpdate(const QString &version)
+{
+	settings.setValue("settings/p5m_skipped_update", version);
+}
+
 // Só fontes multicanal passam pelo mixer espacial; estéreo segue direto.
 bool Settings::GetMacSpatialAudio() const
 {

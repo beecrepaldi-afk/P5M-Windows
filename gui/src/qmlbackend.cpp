@@ -25,6 +25,7 @@
 #include "windowsWakeSleep.h"
 #include "windowsStreamTuning.h"
 #include "windowsNetworkReport.h"
+#include "windowsUpdater.h"
 #endif
 #if CHIAKI_GUI_ENABLE_STEAM_SHORTCUT
 #include "steamtools.h"
@@ -358,6 +359,15 @@ QmlBackend::QmlBackend(Settings *settings, QmlMainWindow *window)
     , window(window)
 {
     qt_msg_handler = qInstallMessageHandler(msg_handler);
+
+#ifdef Q_OS_WIN
+    {
+        auto *updater = new WindowsUpdater(settings, this);
+        connect(updater, &WindowsUpdater::restartRequested, this, []() { QGuiApplication::quit(); });
+        updater->start();
+        updater_obj = updater;
+    }
+#endif
 
     const char *uri = "org.streetpea.chiaking";
     qmlRegisterSingletonInstance(uri, 1, 0, "Chiaki", this);

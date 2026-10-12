@@ -145,16 +145,63 @@ Pane {
                     glyph: "OPTIONS"
                     onClicked: root.showSettingsDialog("general")
                     KeyNavigation.up: navController
-                    KeyNavigation.down: navReport
+                    KeyNavigation.down: navUpdate
                     KeyNavigation.right: hostsView
                 }
                 Item { Layout.fillHeight: true }
+                // A newer P5M on GitHub (Windows, portable version): one press
+                // downloads it, replaces the files and restarts.
+                GlassButton {
+                    id: navUpdate
+                    readonly property var updater: Chiaki.updater
+                    readonly property string updateState: updater ? updater.state : ""
+                    Layout.fillWidth: true
+                    visible: updateState !== ""
+                    enabled: updateState === "available" || updateState === "failed"
+                    selected: updateState === "available"
+                    text: {
+                        switch (updateState) {
+                        case "downloading": return qsTr("Downloading update");
+                        case "installing": return qsTr("Installing update");
+                        case "failed": return qsTr("Update failed: try again");
+                        default: return qsTr("Update to %1").arg(updater ? updater.version : "");
+                        }
+                    }
+                    value: updateState === "downloading" ? updater.progress + "%" : (updateState === "available" ? qsTr("New") : "")
+                    onClicked: {
+                        if (!updater)
+                            return;
+                        if (!updater.canInstall) {
+                            updater.openReleasePage();
+                            return;
+                        }
+                        root.showConfirmDialog(qsTr("Update P5M"),
+                            qsTr("Install P5M %1 now? P5M downloads it, closes and opens again in a minute or two. Your settings and consoles are kept.").arg(updater.version)
+                                + (updateState === "failed" && updater.error ? "\n\n" + qsTr("Last try: %1").arg(updater.error) : ""),
+                            () => updater.install());
+                    }
+                    KeyNavigation.up: navGeneral
+                    KeyNavigation.down: navSkipUpdate
+                    KeyNavigation.right: hostsView
+                }
+                GlassButton {
+                    id: navSkipUpdate
+                    Layout.fillWidth: true
+                    visible: navUpdate.updateState === "available" || navUpdate.updateState === "failed"
+                    text: qsTr("Skip this version")
+                    onClicked: root.showConfirmDialog(qsTr("Skip P5M %1").arg(navUpdate.updater.version),
+                        qsTr("P5M won't offer this version again; you'll hear about the next one. You can still download it from the releases page."),
+                        () => navUpdate.updater.skip())
+                    KeyNavigation.up: navUpdate
+                    KeyNavigation.down: navReport
+                    KeyNavigation.right: hostsView
+                }
                 GlassButton {
                     id: navReport
                     Layout.fillWidth: true
                     text: qsTr("Report a problem")
                     onClicked: root.reportProblem()
-                    KeyNavigation.up: navGeneral
+                    KeyNavigation.up: navSkipUpdate
                     KeyNavigation.down: navQuit
                     KeyNavigation.right: hostsView
                 }

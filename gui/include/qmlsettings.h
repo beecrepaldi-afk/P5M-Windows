@@ -54,6 +54,7 @@ class QmlSettings : public QObject
     Q_PROPERTY(int audioVolume READ audioVolume WRITE setAudioVolume NOTIFY audioVolumeChanged)
     Q_PROPERTY(bool macSpatialAudio READ macSpatialAudio WRITE setMacSpatialAudio NOTIFY macSpatialAudioChanged)
     Q_PROPERTY(bool macHeadTracking READ macHeadTracking WRITE setMacHeadTracking NOTIFY macHeadTrackingChanged)
+    Q_PROPERTY(bool checkForUpdates READ checkForUpdates WRITE setCheckForUpdates NOTIFY checkForUpdatesChanged)
     Q_PROPERTY(QString audioInDevice READ audioInDevice WRITE setAudioInDevice NOTIFY audioInDeviceChanged)
     Q_PROPERTY(QString audioOutDevice READ audioOutDevice WRITE setAudioOutDevice NOTIFY audioOutDeviceChanged)
     Q_PROPERTY(QString decoder READ decoder WRITE setDecoder NOTIFY decoderChanged)
@@ -293,6 +294,8 @@ public:
     bool macSpatialAudio() const;
     void setMacSpatialAudio(bool enabled);
     bool macHeadTracking() const;
+    bool checkForUpdates() const;
+    void setCheckForUpdates(bool enabled);
     void setMacHeadTracking(bool enabled);
 
     int audioVolume() const;
@@ -676,6 +679,7 @@ signals:
     void audioVolumeChanged();
     void macSpatialAudioChanged();
     void macHeadTrackingChanged();
+    void checkForUpdatesChanged();
     void audioOutDeviceChanged();
     void audioInDeviceChanged();
     void wifiDroppedNotifChanged();

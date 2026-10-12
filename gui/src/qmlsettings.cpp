@@ -566,6 +566,17 @@ void QmlSettings::setMacSpatialAudio(bool enabled)
     emit macSpatialAudioChanged();
 }
 
+bool QmlSettings::checkForUpdates() const
+{
+    return settings->GetCheckForUpdates();
+}
+
+void QmlSettings::setCheckForUpdates(bool enabled)
+{
+    settings->SetCheckForUpdates(enabled);
+    emit checkForUpdatesChanged();
+}
+
 bool QmlSettings::macHeadTracking() const
 {
     return settings->GetMacHeadTracking();
@@ -1978,6 +1989,7 @@ void QmlSettings::refreshAllKeys()
     emit audioVolumeChanged();
     emit macSpatialAudioChanged();
     emit macHeadTrackingChanged();
+    emit checkForUpdatesChanged();
     emit audioOutDeviceChanged();
     emit audioInDeviceChanged();
     emit wifiDroppedNotifChanged();
