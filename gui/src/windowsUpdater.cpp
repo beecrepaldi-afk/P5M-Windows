@@ -41,8 +41,10 @@ namespace {
 // "0.1.0-alpha.2" style versions: the numbers first, then a release without
 // a suffix is newer than any alpha/beta/rc of it; suffix parts compare as
 // numbers when both are numbers ("alpha.10" > "alpha.9").
-int compareVersions(const QString &a, const QString &b)
+int compareVersions(const QString &a_full, const QString &b_full)
 {
+    // Build metadata ("+a6997ca8" on branch builds) doesn't order versions.
+    const QString a = a_full.section(QLatin1Char('+'), 0, 0), b = b_full.section(QLatin1Char('+'), 0, 0);
     const QString a_main = a.section(QLatin1Char('-'), 0, 0), b_main = b.section(QLatin1Char('-'), 0, 0);
     const QString a_pre = a.section(QLatin1Char('-'), 1), b_pre = b.section(QLatin1Char('-'), 1);
     const QStringList an = a_main.split(QLatin1Char('.')), bn = b_main.split(QLatin1Char('.'));
