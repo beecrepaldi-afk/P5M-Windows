@@ -28,6 +28,8 @@ P5M is a PS5 Remote Play app based on chiaki-ng. This is the Windows edition: th
 
 Get the latest `P5M-*-win_x64-portable.zip` from [Releases](../../releases) (or from the latest successful run in [Actions](../../actions)), unzip it anywhere and run `P5M.exe`. P5M keeps its settings apart from an installed chiaki-ng.
 
+**Blocked by Smart App Control?** P5M is not code-signed yet, so on Windows 11 with Smart App Control on, Windows may refuse to open it ("Smart App Control blocked an app that may be unsafe") with no way to run it anyway. Until P5M is signed, the only way around it is to turn Smart App Control off: *Settings › Privacy & security › Windows Security › App & browser control › Smart App Control settings › Off*. Signing is on the way.
+
 P5M for Windows is created by [beecrepaldi-afk](https://github.com/beecrepaldi-afk). See [AUTHORS.md](AUTHORS.md). P5M is free software under the GNU AGPL v3, like chiaki-ng.
 
 The upstream project and attribution follow below.

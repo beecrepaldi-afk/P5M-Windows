@@ -33,6 +33,7 @@ And tuning for Windows:
 1. Download `P5M-0.1.0-alpha.2-win_x64-portable.zip` below and unzip it anywhere.
 2. Run `P5M.exe`. If Windows says the Visual C++ runtime is missing, run `vc_redist.x64.exe` from the same folder first.
 3. P5M is not signed yet, so Windows SmartScreen may warn about an unknown publisher: choose *More info › Run anyway*.
+4. On Windows 11 with **Smart App Control** on, Windows may block P5M outright ("Smart App Control blocked an app that may be unsafe"), with no option to run it. Until P5M is code-signed, the only way around it is to turn Smart App Control off: *Settings › Privacy & security › Windows Security › App & browser control › Smart App Control settings › Off*.
 
 Windows 10 (1803 or later) or Windows 11, 64-bit. P5M keeps its settings apart from an installed chiaki-ng.
 
